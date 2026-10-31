@@ -1,0 +1,525 @@
+/* Profile: a round button at the top right (above the eye and sunlight buttons) and the card that drops down from it. */
+
+.profile {
+  position: absolute;
+  z-index: 7;
+  top: calc(20px + env(safe-area-inset-top, 0px));
+  right: calc(20px + env(safe-area-inset-right, 0px));
+  transition: opacity 0.18s ease;
+}
+
+/* the chat panel covers this corner */
+.chat-open .profile {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.profile-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.18s ease;
+}
+
+.profile-btn:hover,
+.profile-btn[aria-expanded='true'] {
+  border-color: rgba(255, 255, 255, 0.75);
+}
+
+.profile-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.profile-badge svg {
+  display: block;
+}
+
+/* ---------- card ---------- */
+
+.profile-card {
+  position: absolute;
+  top: 56px;
+  right: 0;
+  display: grid;
+  gap: 16px;
+  width: 360px;
+  max-height: calc(100dvh - 96px - env(safe-area-inset-top, 0px));
+  padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 24px;
+  background: #0b0b0c;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  transform-origin: top right;
+  animation: pf-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes pf-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+}
+
+.pf-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.pf-avatar {
+  position: relative;
+  flex: none;
+}
+
+.pf-avatar-btn {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.pf-avatar-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.pf-avatar-btn:hover::after,
+.pf-avatar-btn.is-busy::after {
+  opacity: 1;
+}
+
+.pf-avatar-btn.is-busy {
+  cursor: progress;
+}
+
+.pf-avatar-cam {
+  position: absolute;
+  z-index: 1;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  color: #000;
+  box-shadow: 0 0 0 3px #0b0b0c;
+}
+
+.pf-error {
+  margin: -6px 0 0;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(239, 107, 95, 0.12);
+  font-size: 13px;
+  line-height: 1.4;
+  color: #ffb4ab;
+}
+
+.pf-who {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+/* the name edits in place: it looks like text until you point at it */
+.pf-name {
+  width: calc(100% + 8px);
+  margin-left: -9px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: #fff;
+  font: 600 19px/1.2 var(--font);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.pf-name:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.pf-name:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pf-email {
+  overflow: hidden;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* a ticket stub, like the boarding pass on the sign-up screen */
+.pf-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 9px 9px 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+}
+
+.pf-id-label {
+  font: 500 9.5px/1 var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.pf-id code {
+  flex: 1;
+  font: 500 13.5px/1 var(--mono);
+  letter-spacing: 0.06em;
+  color: #fff;
+}
+
+.pf-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: none;
+  color: #fff;
+  font: 500 12px/1 var(--font);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.pf-copy:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.pf-section h3 {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.pf-status {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pf-status-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.pf-status-opt:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.pf-status-opt[aria-checked='true'] {
+  border-color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.pf-status-opt svg {
+  flex: none;
+}
+
+.pf-status-opt > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pf-status-opt strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pf-status-opt small {
+  overflow: hidden;
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.pf-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 0;
+  background: none;
+  color: #fff;
+  font: 400 14.5px/1.2 var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pf-row + .pf-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.pf-row.is-action:first-child { border-radius: 16px 16px 0 0; }
+.pf-row.is-action:last-child { border-radius: 0 0 16px 16px; }
+
+.pf-row.is-action:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pf-row.is-action svg {
+  flex: none;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.pf-switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.pf-switch::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s ease;
+}
+
+.pf-switch:checked {
+  background: #3a92d0;
+}
+
+.pf-switch:checked::before {
+  transform: translateX(16px);
+}
+
+.pf-spotify {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 11px 11px 14px;
+  color: rgba(255, 255, 255, 0.85);
+  --logo-ink: #000;
+}
+
+.pf-spotify.is-linked {
+  color: #1ed760;
+}
+
+.pf-spotify svg {
+  flex: none;
+}
+
+.pf-spotify-text {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.pf-spotify-text strong {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.pf-spotify-text small {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.pf-btn {
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: none;
+  color: #fff;
+  font: 500 13px/1 var(--font);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.pf-btn:hover:not(:disabled) {
+  border-color: #fff;
+}
+
+.pf-btn.is-green {
+  border-color: #1ed760;
+  background: #1ed760;
+  color: #000;
+  font-weight: 600;
+}
+
+.pf-btn.is-green:hover {
+  background: #3be477;
+}
+
+.pf-btn.is-danger {
+  border-color: transparent;
+  background: #e5484d;
+  font-weight: 600;
+}
+
+.pf-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pf-note {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.pf-inline {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #1ed760;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pf-inline:hover {
+  text-decoration: underline;
+}
+
+.pf-danger {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.pf-danger button {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.6);
+  font: 500 13px/1 var(--font);
+  cursor: pointer;
+}
+
+.pf-danger button:hover {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pf-danger .is-red,
+.pf-danger .is-red:hover {
+  color: #ff6b6b;
+}
+
+.pf-confirm {
+  padding: 14px;
+  border: 1px solid rgba(229, 72, 77, 0.35);
+  border-radius: 16px;
+  background: rgba(229, 72, 77, 0.06);
+}
+
+.pf-confirm p {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.pf-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* phones: the button joins the eye and sunlight buttons at the bottom right; the card is a bottom sheet */
+@media (max-width: 560px) {
+  .profile {
+    top: auto;
+    bottom: calc(141px + env(safe-area-inset-bottom, 0px));
+    right: 16px;
+  }
+  .profile-card {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: 86dvh;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    border-bottom: 0;
+    border-radius: 24px 24px 0 0;
+    animation-name: pf-up;
+  }
+}
+
+@keyframes pf-up {
+  from { opacity: 0; transform: translateY(40px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-card { animation: none; }
+}

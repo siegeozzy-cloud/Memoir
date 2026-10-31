@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 128" width="320" height="256">
+  <!-- Placeholder photo for the pin on the sign-in screen: sunrise over a sea of clouds, Benguet highlands. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b2745"/>
+      <stop offset="0.38" stop-color="#4c5d8c"/>
+      <stop offset="0.6" stop-color="#c98f86"/>
+      <stop offset="0.74" stop-color="#f3c08f"/>
+      <stop offset="1" stop-color="#f7d9b0"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.64" cy="0.6" r="0.5">
+      <stop offset="0" stop-color="#fff6e2"/>
+      <stop offset="0.07" stop-color="#ffe7bf" stop-opacity="0.95"/>
+      <stop offset="0.3" stop-color="#ffc98e" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ffc98e" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="far" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8e86a6"/>
+      <stop offset="1" stop-color="#b4a2a8"/>
+    </linearGradient>
+    <linearGradient id="clouds" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbe3c7"/>
+      <stop offset="0.5" stop-color="#e8cdbf"/>
+      <stop offset="1" stop-color="#b9adbf"/>
+    </linearGradient>
+    <linearGradient id="mid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4b4f6e"/>
+      <stop offset="1" stop-color="#2f3350"/>
+    </linearGradient>
+    <linearGradient id="near" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d2133"/>
+      <stop offset="1" stop-color="#0d0f18"/>
+    </linearGradient>
+    <filter id="soft" x="-10%" y="-50%" width="120%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0.09 0"/>
+      <feComposite in2="SourceGraphic" operator="in"/>
+    </filter>
+  </defs>
+
+  <rect width="160" height="128" fill="url(#sky)"/>
+  <rect width="160" height="128" fill="url(#sun)"/>
+
+  <!-- distant ridge above the clouds -->
+  <path d="M0 74 C14 66 22 60 34 62 C44 64 50 56 60 57 C72 58 80 66 92 64 C104 62 112 70 126 68 C138 66 150 60 160 63 V88 H0Z" fill="url(#far)"/>
+
+  <!-- sea of clouds -->
+  <path d="M0 80 C18 74 32 79 48 76 C66 73 80 79 98 76 C116 73 132 78 160 74 V104 H0Z" fill="url(#clouds)"/>
+  <g fill="#fff4e6" opacity="0.55" filter="url(#soft)">
+    <ellipse cx="34" cy="81" rx="26" ry="3.2"/>
+    <ellipse cx="104" cy="79" rx="30" ry="3"/>
+    <ellipse cx="70" cy="86" rx="40" ry="2.6"/>
+  </g>
+
+  <!-- middle ridge -->
+  <path d="M0 96 C12 88 22 82 36 84 C48 86 56 92 68 90 C78 88 84 84 94 86 C106 88 112 96 124 96 C136 96 146 90 160 92 V128 H0Z" fill="url(#mid)"/>
+
+  <!-- foreground slope with grass -->
+  <path d="M0 108 C20 104 36 106 54 110 C72 114 92 112 112 114 C128 116 146 112 160 113 V128 H0Z" fill="url(#near)"/>
+  <g stroke="#0b0d14" stroke-width="0.8" stroke-linecap="round">
+    <path d="M10 108 l-1.5 -5 M13 108 l0.5 -6 M16 108 l2 -5 M28 107 l-1 -4 M31 107 l1.5 -5"/>
+    <path d="M118 115 l-1 -5 M121 115 l0.8 -6 M124 115 l2 -4 M140 113 l-1 -5 M143 113 l1.5 -4"/>
+  </g>
+
+  <rect width="160" height="128" filter="url(#grain)"/>
+</svg>

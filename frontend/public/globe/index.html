@@ -1,0 +1,2281 @@
+<title>Blue Marble Globe</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600&family=Roboto+Mono:wght@500&display=swap">
+<style>
+/* Layout: full-bleed WebGL globe in black space; Google-style white chips float at the corners,
+   a thin HUD of camera readouts runs along the bottom edge. Single dark world, one theme by design. */
+:root {
+  --space: #010204;
+  --chip: #ffffff;
+  --chip-ink: #3c4043;
+  --chip-ink-soft: #5f6368;
+  --chip-line: #e3e5e8;
+  --chip-hover: #f1f3f4;
+  --blue: #1a73e8;
+  --blue-track: #a8c7fa;
+  --track-off: #bdc1c6;
+  --hud: #f4f7fb;
+  --hud-halo: rgba(0, 0, 0, 0.78);
+  --load-ink: rgba(232, 238, 248, 0.86);
+  --load-track: rgba(255, 255, 255, 0.14);
+  --load-fill: #8ab4f8;
+  --map-land: #f6f5f4;
+  --map-ink: #3c4043;
+  --map-halo: rgba(255, 255, 255, 0.92);
+  --font-ui: "Figtree", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-num: "Roboto Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --elev: 0 1px 2px rgba(0, 0, 0, 0.32), 0 2px 8px 2px rgba(0, 0, 0, 0.18);
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--space);
+  color: var(--hud);
+  font-family: var(--font-ui);
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#globe, #labels { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#globe { touch-action: none; cursor: grab; outline: none; }
+#globe.dragging { cursor: grabbing; }
+#labels { pointer-events: none; }
+#map { position: fixed; inset: 0; z-index: 2; background: var(--map-land); visibility: hidden; opacity: 0; pointer-events: none; }
+#map.on { pointer-events: auto; }
+body.street { --hud: var(--map-ink); --hud-halo: var(--map-halo); }
+.attrib a { color: inherit; pointer-events: auto; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---------- top row: search + labels switch ---------- */
+.topbar {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  left: 0; right: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  grid-template-columns: minmax(0, 340px) 1fr minmax(0, 340px);
+  align-items: start;
+  gap: 12px;
+  pointer-events: none;
+  z-index: 5;
+}
+.topbar > * { pointer-events: auto; }
+.search { grid-column: 1; position: relative; color-scheme: light; }
+.search-box {
+  height: 44px; display: flex; align-items: center; gap: 10px;
+  padding: 0 8px 0 14px; background: var(--chip); border-radius: 22px; box-shadow: var(--elev);
+}
+.search-box svg { flex: none; color: var(--chip-ink-soft); }
+.search-box input {
+  flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent;
+  font: 500 15px/1 var(--font-ui); color: var(--chip-ink);
+}
+.search-box input::placeholder { color: var(--chip-ink-soft); }
+.search-box:focus-within { box-shadow: var(--elev), 0 0 0 2px var(--blue); }
+.clear {
+  flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent;
+  color: var(--chip-ink-soft); cursor: pointer; display: grid; place-items: center;
+}
+.clear:hover { background: var(--chip-hover); }
+.results {
+  position: absolute; top: 52px; left: 0; right: 0; margin: 0; padding: 6px 0; list-style: none;
+  background: var(--chip); border-radius: 14px; box-shadow: var(--elev); max-height: min(56vh, 420px); overflow: auto;
+}
+.results li {
+  padding: 9px 16px; display: grid; gap: 2px; cursor: pointer; color: var(--chip-ink);
+  font: 600 14px/1.25 var(--font-ui);
+}
+.results li small { font: 500 12px/1.2 var(--font-ui); color: var(--chip-ink-soft); }
+.results li[aria-selected="true"], .results li:hover { background: var(--chip-hover); }
+.results .empty { cursor: default; color: var(--chip-ink-soft); font-weight: 500; }
+
+.labels-toggle {
+  grid-column: 2; justify-self: center; position: relative; color-scheme: light;
+  display: inline-flex; align-items: center; gap: 14px; height: 44px; padding: 0 22px 0 16px;
+  background: var(--chip); color: var(--chip-ink); border-radius: 999px; box-shadow: var(--elev);
+  font: 600 14px/1 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase;
+  cursor: pointer; user-select: none; white-space: nowrap;
+}
+.labels-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.track { position: relative; width: 36px; height: 14px; border-radius: 7px; background: var(--track-off); transition: background 0.2s; flex: none; }
+.knob {
+  position: absolute; top: 50%; left: -3px; width: 22px; height: 22px; margin-top: -11px; border-radius: 50%;
+  background: var(--chip); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); transition: transform 0.2s, background 0.2s;
+}
+.labels-toggle input:checked + .track { background: var(--blue-track); }
+.labels-toggle input:checked + .track .knob { transform: translateX(19px); background: var(--blue); }
+.labels-toggle input:focus-visible + .track { outline: 2px solid var(--blue); outline-offset: 5px; }
+
+@media (max-width: 760px) {
+  .topbar { grid-template-columns: minmax(0, 1fr); }
+  .labels-toggle { grid-column: 1; justify-self: start; height: 38px; padding: 0 16px 0 12px; font-size: 12.5px; gap: 12px; }
+}
+
+/* ---------- right-side map controls ---------- */
+.controls {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: calc(46px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; align-items: center; gap: 10px; z-index: 5; color-scheme: light;
+}
+.fab, .zoom button {
+  width: 40px; height: 40px; border: 0; padding: 0; display: grid; place-items: center; cursor: pointer;
+  background: var(--chip); color: var(--chip-ink-soft); font: 600 13px/1 var(--font-ui);
+}
+.fab { border-radius: 50%; box-shadow: var(--elev); }
+.fab[aria-pressed="true"] { color: var(--blue); }
+.zoom { display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; box-shadow: var(--elev); background: var(--chip); }
+.zoom button { font: 400 24px/1 var(--font-ui); }
+.zoom button + button { border-top: 1px solid var(--chip-line); }
+.fab:hover, .zoom button:hover { background: var(--chip-hover); }
+.fab:focus-visible, .zoom button:focus-visible, .clear:focus-visible, .seg button:focus-visible, .now:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 2px;
+}
+#needle { transition: transform 0.08s linear; transform-origin: 50% 50%; }
+
+/* ---------- lighting panel ---------- */
+.panel {
+  position: fixed; z-index: 6; color-scheme: light;
+  right: calc(max(16px, env(safe-area-inset-right, 0px)) + 52px);
+  bottom: calc(46px + env(safe-area-inset-bottom, 0px));
+  width: min(300px, calc(100vw - 100px));
+  background: var(--chip); color: var(--chip-ink); border-radius: 16px; box-shadow: var(--elev);
+  padding: 16px; display: grid; gap: 14px;
+}
+.panel h2 { margin: 0; font: 700 13px/1 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--chip-ink-soft); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--chip-hover); border-radius: 10px; padding: 3px; }
+.seg button {
+  border: 0; background: transparent; padding: 9px 6px; border-radius: 8px; cursor: pointer;
+  font: 600 13px/1 var(--font-ui); color: var(--chip-ink-soft);
+}
+.seg button[aria-pressed="true"] { background: var(--chip); color: var(--blue); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: 600 13px/1.2 var(--font-ui); }
+.row output { font: 500 12px/1.2 var(--font-num); color: var(--chip-ink-soft); font-variant-numeric: tabular-nums; }
+.panel input[type="range"] { width: 100%; margin: 0; accent-color: var(--blue); }
+.panel input[type="range"]:disabled { opacity: 0.4; }
+.now {
+  border: 0; background: transparent; color: var(--blue); font: 700 12px/1 var(--font-ui);
+  letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; padding: 4px 2px;
+}
+.now:disabled { color: var(--track-off); cursor: default; }
+.check { display: flex; align-items: center; justify-content: space-between; font: 600 13px/1.2 var(--font-ui); cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--blue); margin: 0; }
+.panel p { margin: 0; font: 500 12px/1.45 var(--font-ui); color: var(--chip-ink-soft); }
+
+/* ---------- bottom HUD ---------- */
+.hud {
+  position: fixed; left: 0; right: 0;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
+  color: var(--hud); text-shadow: 0 0 3px var(--hud-halo), 0 1px 2px var(--hud-halo);
+  pointer-events: none; z-index: 4;
+}
+.attrib { font: 500 11.5px/1.35 var(--font-ui); opacity: 0.82; min-width: 0; }
+.hint { display: block; font: 600 12px/1.35 var(--font-ui); opacity: 0.95; transition: opacity 0.6s; margin-bottom: 3px; }
+.hint.gone { opacity: 0; }
+.readout {
+  display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; justify-content: flex-end;
+  font: 500 11.5px/1.2 var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.scale { display: grid; gap: 3px; justify-items: start; }
+.scale .bar { height: 5px; border: 1.5px solid var(--hud); border-top: 0; box-shadow: 0 1px 2px var(--hud-halo); }
+@media (max-width: 560px) {
+  .attrib .src { display: none; }
+  .readout { gap: 10px; font-size: 10.5px; }
+  .readout #cursor { display: none; }
+}
+
+/* ---------- loading ---------- */
+#loading {
+  position: fixed; inset: 0; z-index: 20; display: grid; place-items: center;
+  background: var(--space); transition: opacity 0.9s ease;
+}
+#loading.done { opacity: 0; pointer-events: none; }
+.load-box { display: grid; gap: 14px; justify-items: center; color: var(--load-ink); font: 600 12.5px/1.4 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; text-align: center; padding: 0 24px; }
+.load-bar { width: 200px; height: 2px; border-radius: 2px; background: var(--load-track); overflow: hidden; }
+.load-bar i { display: block; height: 100%; width: 0; background: var(--load-fill); transition: width 0.35s ease; }
+.load-box .err { text-transform: none; letter-spacing: 0; font-weight: 500; max-width: 46ch; }
+
+@media (prefers-reduced-motion: reduce) {
+  #loading, .hint, .track, .knob { transition: none; }
+}
+
+/* ---------- Memoir embed: the app draws its own controls over this page ---------- */
+.topbar, .hint, .readout, .attrib .src, #compass, #tiltBtn, .zoom { display: none !important; }
+:root { --m-ink: #fff; --m-soft: rgba(255, 255, 255, 0.6); --m-line: rgba(255, 255, 255, 0.28); --m-surface: #050505; --m-font: "Inter", system-ui, sans-serif; }
+
+/* sunlight button: sits under Memoir's profile and details buttons (top right) and matches them */
+.controls { top: calc(128px + env(safe-area-inset-top, 0px)); right: calc(20px + env(safe-area-inset-right, 0px)); bottom: auto; color-scheme: dark; transition: opacity 0.25s ease; }
+body.memoir-no-controls .controls { opacity: 0; pointer-events: none; } /* hidden while the chat panel covers this corner */
+.fab, .fab:hover {
+  width: 44px; height: 44px; background: var(--m-surface); color: var(--m-ink);
+  border: 1px solid var(--m-line); box-shadow: none; opacity: 0.85; transition: opacity 0.18s ease;
+}
+.fab:hover, .fab[aria-pressed="true"] { opacity: 1; color: var(--m-ink); }
+.fab[aria-pressed="true"] { background: #161616; }
+.fab:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.9); outline-offset: 3px; }
+
+/* sunlight panel: same controls as the original globe, in Memoir's black and white */
+.panel {
+  top: calc(128px + env(safe-area-inset-top, 0px)); bottom: auto;
+  right: calc(20px + env(safe-area-inset-right, 0px) + 56px);
+  color-scheme: dark; background: var(--m-surface); color: var(--m-ink);
+  border: 1px solid var(--m-line); border-radius: 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  font-family: var(--m-font); padding: 18px; box-sizing: border-box;
+}
+.panel h2 { font: 600 12px/1 var(--m-font); letter-spacing: 0.12em; color: var(--m-soft); }
+.seg { background: #141414; border-radius: 12px; }
+.seg button { font: 500 13px/1 var(--m-font); color: var(--m-soft); border-radius: 9px; }
+.seg button[aria-pressed="true"] { background: #fff; color: #000; box-shadow: none; }
+.seg button:focus-visible, .now:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.9); outline-offset: 2px; }
+.row, .check { font: 500 13px/1.2 var(--m-font); }
+.row output { color: var(--m-soft); }
+.panel input[type="range"], .check input { accent-color: #fff; }
+.now { color: var(--m-ink); font: 600 11.5px/1 var(--m-font); letter-spacing: 0.1em; }
+.now:disabled { color: rgba(255, 255, 255, 0.28); }
+.panel p { font: 400 12px/1.5 var(--m-font); color: var(--m-soft); }
+
+@media (max-width: 560px) {
+  /* Memoir moves its details toggle to the bottom right on phones; stack the sun button above it */
+  .controls { top: auto; bottom: calc(87px + env(safe-area-inset-bottom, 0px)); right: 16px; }
+  /* the app's fun fact and dock are drawn above this page, so the panel opens at the top, clear of them */
+  .panel { top: calc(16px + env(safe-area-inset-top, 0px)); bottom: auto; left: 16px; right: 16px; width: auto; }
+}
+body.street .attrib .src { display: inline !important; } /* OpenFreeMap attribution must stay visible on the street map */
+#pins { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
+.pin {
+  position: absolute; left: 0; top: 0; width: 26px; height: 36px; margin: -36px 0 0 -13px;
+  padding: 0; border: 0; background: none; cursor: pointer; will-change: transform, opacity;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+}
+.pin svg { display: block; width: 100%; height: 100%; transform-origin: 50% 100%; transition: transform 0.18s ease; }
+.pin:hover svg, .pin:focus-visible svg { transform: scale(1.14); }
+.pin:focus-visible { outline: none; }
+.pin:focus-visible svg { filter: drop-shadow(0 0 0 2px #fff); }
+/* placing a new post: click the map to drop the blue pin, drag it to adjust; other pins step back */
+body.memoir-placing #globe { cursor: crosshair; }
+body.memoir-placing #globe.dragging { cursor: grabbing; }
+body.memoir-placing #map .maplibregl-canvas-container { cursor: crosshair; }
+body.memoir-placing .pin:not(.is-draft) { pointer-events: none !important; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45)) opacity(0.55); }
+.pin.is-draft { width: 34px; height: 46px; margin: -46px 0 0 -17px; cursor: grab; touch-action: none; z-index: 1; }
+.pin.is-draft.is-dragging { cursor: grabbing; }
+.pin.is-draft.is-dragging svg { transform: scale(1.12) translateY(-4px); }
+.pin.is-draft.is-dropped svg { animation: draft-drop 0.32s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes draft-drop { from { transform: translateY(-14px) scale(0.85); } }
+/* sign-in screen: one photo memory pinned in the porthole view (decorative), drawn like the Memoir logo: a photo
+   card with another peeking out behind it, on a thin stem to a glowing point on the surface. Vanishes on sign-in. */
+.pin.is-photo { width: 0; height: 0; margin: 0; cursor: default; filter: none; }
+.pin.is-photo > * { position: absolute; }
+.photo-stem { left: -0.5px; bottom: 4px; width: 1px; height: 30px; background: linear-gradient(to top, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.45)); }
+.photo-stack {
+  left: -38px; bottom: 28px; width: 76px; height: 62px; transform-origin: 50% 100%;
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.5));
+  animation: photo-in 0.7s cubic-bezier(0.22, 1.2, 0.36, 1) both, photo-float 6s ease-in-out 0.7s infinite;
+}
+.photo-back, .photo-card { position: absolute; inset: 0; border-radius: 11px; box-sizing: border-box; }
+.photo-back { transform: translate(8px, -5px) rotate(7deg); background: rgba(16, 20, 26, 0.6); border: 1.5px solid rgba(255, 255, 255, 0.75); }
+.photo-card { padding: 3px; background: #fff; transform: rotate(-4deg); }
+.photo-card img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+.photo-dot { left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18), 0 0 12px 2px rgba(255, 255, 255, 0.55); }
+.photo-dot::after { content: ""; position: absolute; inset: -4px; border: 1px solid rgba(255, 255, 255, 0.75); border-radius: 50%; animation: photo-ping 2.6s ease-out infinite; }
+.photo-tag { /* a dark chip, so it reads over bright clouds */
+  left: 12px; top: -10px; padding: 4px 7px 4px 8px; border-radius: 6px; background: rgba(6, 8, 12, 0.62);
+  font: 500 9.5px/12px "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.2em; text-transform: uppercase; white-space: nowrap; color: rgba(255, 255, 255, 0.92);
+}
+.pin.is-photo.is-leaving .photo-stack { animation: photo-out 0.4s cubic-bezier(0.55, 0, 0.75, 0.2) forwards; }
+.pin.is-photo.is-leaving .photo-stem, .pin.is-photo.is-leaving .photo-dot, .pin.is-photo.is-leaving .photo-tag { animation: photo-fade 0.35s ease forwards; }
+@keyframes photo-in { from { opacity: 0; transform: translateY(12px) scale(0.7); } }
+@keyframes photo-float { 50% { transform: translateY(-3px); } }
+@keyframes photo-ping { from { transform: scale(0.6); opacity: 0.9; } to { transform: scale(2.4); opacity: 0; } }
+@keyframes photo-out { to { opacity: 0; transform: translateY(10px) scale(0.5); } }
+@keyframes photo-fade { to { opacity: 0; } }
+@media (max-width: 860px) { .pin.is-photo > * { zoom: 0.8; } }
+@media (prefers-reduced-motion: reduce) { .photo-stack, .photo-dot::after { animation: none; } }
+#loading { background: #000; }
+</style>
+<style>/* MapLibre GL JS 5.24.0 (BSD-3-Clause) */
+.maplibregl-map{font:12px/20px Helvetica Neue,Arial,Helvetica,sans-serif;overflow:hidden;position:relative;-webkit-tap-highlight-color:rgb(0 0 0/0)}.maplibregl-canvas{left:0;position:absolute;top:0}.maplibregl-map:fullscreen{height:100%;width:100%}.maplibregl-ctrl-group button.maplibregl-ctrl-compass{touch-action:none}.maplibregl-canvas-container.maplibregl-interactive,.maplibregl-ctrl-group button.maplibregl-ctrl-compass{cursor:grab;-webkit-user-select:none;-moz-user-select:none;user-select:none}.maplibregl-canvas-container.maplibregl-interactive.maplibregl-track-pointer{cursor:pointer}.maplibregl-canvas-container.maplibregl-interactive:active,.maplibregl-ctrl-group button.maplibregl-ctrl-compass:active{cursor:grabbing}.maplibregl-canvas-container.maplibregl-touch-zoom-rotate,.maplibregl-canvas-container.maplibregl-touch-zoom-rotate .maplibregl-canvas{touch-action:pan-x pan-y}.maplibregl-canvas-container.maplibregl-touch-drag-pan,.maplibregl-canvas-container.maplibregl-touch-drag-pan .maplibregl-canvas{touch-action:pinch-zoom}.maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,.maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan .maplibregl-canvas{touch-action:none}.maplibregl-canvas-container.maplibregl-touch-drag-pan.maplibregl-cooperative-gestures,.maplibregl-canvas-container.maplibregl-touch-drag-pan.maplibregl-cooperative-gestures .maplibregl-canvas{touch-action:pan-x pan-y}.maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right,.maplibregl-ctrl-top-left,.maplibregl-ctrl-top-right{pointer-events:none;position:absolute;z-index:2}.maplibregl-ctrl-top-left{left:0;top:0}.maplibregl-ctrl-top-right{right:0;top:0}.maplibregl-ctrl-bottom-left{bottom:0;left:0}.maplibregl-ctrl-bottom-right{bottom:0;right:0}.maplibregl-ctrl{clear:both;pointer-events:auto;transform:translate(0)}.maplibregl-ctrl-top-left .maplibregl-ctrl{float:left;margin:10px 0 0 10px}.maplibregl-ctrl-top-right .maplibregl-ctrl{float:right;margin:10px 10px 0 0}.maplibregl-ctrl-bottom-left .maplibregl-ctrl{float:left;margin:0 0 10px 10px}.maplibregl-ctrl-bottom-right .maplibregl-ctrl{float:right;margin:0 10px 10px 0}.maplibregl-ctrl-group{background:#fff;border-radius:4px}.maplibregl-ctrl-group:not(:empty){box-shadow:0 0 0 2px rgba(0,0,0,.1)}@media (forced-colors:active){.maplibregl-ctrl-group:not(:empty){box-shadow:0 0 0 2px ButtonText}}.maplibregl-ctrl-group button{background-color:transparent;border:0;box-sizing:border-box;cursor:pointer;display:block;height:29px;outline:none;padding:0;width:29px}.maplibregl-ctrl-group button+button{border-top:1px solid #ddd}.maplibregl-ctrl button .maplibregl-ctrl-icon{background-position:50%;background-repeat:no-repeat;display:block;height:100%;width:100%}@media (forced-colors:active){.maplibregl-ctrl-icon{background-color:transparent}.maplibregl-ctrl-group button+button{border-top:1px solid ButtonText}}.maplibregl-ctrl button::-moz-focus-inner{border:0;padding:0}.maplibregl-ctrl-attrib-button:focus,.maplibregl-ctrl-group button:focus{box-shadow:0 0 2px 2px #0096ff}.maplibregl-ctrl button:disabled{cursor:not-allowed}.maplibregl-ctrl button:disabled .maplibregl-ctrl-icon{opacity:.25}@media (hover:hover){.maplibregl-ctrl button:not(:disabled):hover{background-color:rgba(0,0,0,.05)}}.maplibregl-ctrl button:not(:disabled):active{background-color:rgba(0,0,0,.05)}.maplibregl-ctrl-group button:focus:focus-visible{box-shadow:0 0 2px 2px #0096ff}.maplibregl-ctrl-group button:focus:not(:focus-visible){box-shadow:none}.maplibregl-ctrl-group button:focus:first-child{border-radius:4px 4px 0 0}.maplibregl-ctrl-group button:focus:last-child{border-radius:0 0 4px 4px}.maplibregl-ctrl-group button:focus:only-child{border-radius:inherit}.maplibregl-ctrl button.maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23333' viewBox='0 0 29 29'%3E%3Cpath d='M10 13c-.75 0-1.5.75-1.5 1.5S9.25 16 10 16h9c.75 0 1.5-.75 1.5-1.5S19.75 13 19 13z'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23333' viewBox='0 0 29 29'%3E%3Cpath d='M14.5 8.5c-.75 0-1.5.75-1.5 1.5v3h-3c-.75 0-1.5.75-1.5 1.5S9.25 16 10 16h3v3c0 .75.75 1.5 1.5 1.5S16 19.75 16 19v-3h3c.75 0 1.5-.75 1.5-1.5S19.75 13 19 13h-3v-3c0-.75-.75-1.5-1.5-1.5'/%3E%3C/svg%3E")}@media (forced-colors:active){.maplibregl-ctrl button.maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23fff' viewBox='0 0 29 29'%3E%3Cpath d='M10 13c-.75 0-1.5.75-1.5 1.5S9.25 16 10 16h9c.75 0 1.5-.75 1.5-1.5S19.75 13 19 13z'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23fff' viewBox='0 0 29 29'%3E%3Cpath d='M14.5 8.5c-.75 0-1.5.75-1.5 1.5v3h-3c-.75 0-1.5.75-1.5 1.5S9.25 16 10 16h3v3c0 .75.75 1.5 1.5 1.5S16 19.75 16 19v-3h3c.75 0 1.5-.75 1.5-1.5S19.75 13 19 13h-3v-3c0-.75-.75-1.5-1.5-1.5'/%3E%3C/svg%3E")}}@media (forced-colors:active) and (prefers-color-scheme:light){.maplibregl-ctrl button.maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cpath d='M10 13c-.75 0-1.5.75-1.5 1.5S9.25 16 10 16h9c.75 0 1.5-.75 1.5-1.5S19.75 13 19 13z'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cpath d='M14.5 8.5c-.75 0-1.5.75-1.5 1.5v3h-3c-.75 0-1.5.75-1.5 1.5S9.25 16 10 16h3v3c0 .75.75 1.5 1.5 1.5S16 19.75 16 19v-3h3c.75 0 1.5-.75 1.5-1.5S19.75 13 19 13h-3v-3c0-.75-.75-1.5-1.5-1.5'/%3E%3C/svg%3E")}}.maplibregl-ctrl button.maplibregl-ctrl-fullscreen .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23333' viewBox='0 0 29 29'%3E%3Cpath d='M24 16v5.5c0 1.75-.75 2.5-2.5 2.5H16v-1l3-1.5-4-5.5 1-1 5.5 4 1.5-3zM6 16l1.5 3 5.5-4 1 1-4 5.5 3 1.5v1H7.5C5.75 24 5 23.25 5 21.5V16zm7-11v1l-3 1.5 4 5.5-1 1-5.5-4L6 13H5V7.5C5 5.75 5.75 5 7.5 5zm11 2.5c0-1.75-.75-2.5-2.5-2.5H16v1l3 1.5-4 5.5 1 1 5.5-4 1.5 3h1z'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-shrink .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cpath d='M18.5 16c-1.75 0-2.5.75-2.5 2.5V24h1l1.5-3 5.5 4 1-1-4-5.5 3-1.5v-1zM13 18.5c0-1.75-.75-2.5-2.5-2.5H5v1l3 1.5L4 24l1 1 5.5-4 1.5 3h1zm3-8c0 1.75.75 2.5 2.5 2.5H24v-1l-3-1.5L25 5l-1-1-5.5 4L17 5h-1zM10.5 13c1.75 0 2.5-.75 2.5-2.5V5h-1l-1.5 3L5 4 4 5l4 5.5L5 12v1z'/%3E%3C/svg%3E")}@media (forced-colors:active){.maplibregl-ctrl button.maplibregl-ctrl-fullscreen .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23fff' viewBox='0 0 29 29'%3E%3Cpath d='M24 16v5.5c0 1.75-.75 2.5-2.5 2.5H16v-1l3-1.5-4-5.5 1-1 5.5 4 1.5-3zM6 16l1.5 3 5.5-4 1 1-4 5.5 3 1.5v1H7.5C5.75 24 5 23.25 5 21.5V16zm7-11v1l-3 1.5 4 5.5-1 1-5.5-4L6 13H5V7.5C5 5.75 5.75 5 7.5 5zm11 2.5c0-1.75-.75-2.5-2.5-2.5H16v1l3 1.5-4 5.5 1 1 5.5-4 1.5 3h1z'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-shrink .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23fff' viewBox='0 0 29 29'%3E%3Cpath d='M18.5 16c-1.75 0-2.5.75-2.5 2.5V24h1l1.5-3 5.5 4 1-1-4-5.5 3-1.5v-1zM13 18.5c0-1.75-.75-2.5-2.5-2.5H5v1l3 1.5L4 24l1 1 5.5-4 1.5 3h1zm3-8c0 1.75.75 2.5 2.5 2.5H24v-1l-3-1.5L25 5l-1-1-5.5 4L17 5h-1zM10.5 13c1.75 0 2.5-.75 2.5-2.5V5h-1l-1.5 3L5 4 4 5l4 5.5L5 12v1z'/%3E%3C/svg%3E")}}@media (forced-colors:active) and (prefers-color-scheme:light){.maplibregl-ctrl button.maplibregl-ctrl-fullscreen .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cpath d='M24 16v5.5c0 1.75-.75 2.5-2.5 2.5H16v-1l3-1.5-4-5.5 1-1 5.5 4 1.5-3zM6 16l1.5 3 5.5-4 1 1-4 5.5 3 1.5v1H7.5C5.75 24 5 23.25 5 21.5V16zm7-11v1l-3 1.5 4 5.5-1 1-5.5-4L6 13H5V7.5C5 5.75 5.75 5 7.5 5zm11 2.5c0-1.75-.75-2.5-2.5-2.5H16v1l3 1.5-4 5.5 1 1 5.5-4 1.5 3h1z'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-shrink .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cpath d='M18.5 16c-1.75 0-2.5.75-2.5 2.5V24h1l1.5-3 5.5 4 1-1-4-5.5 3-1.5v-1zM13 18.5c0-1.75-.75-2.5-2.5-2.5H5v1l3 1.5L4 24l1 1 5.5-4 1.5 3h1zm3-8c0 1.75.75 2.5 2.5 2.5H24v-1l-3-1.5L25 5l-1-1-5.5 4L17 5h-1zM10.5 13c1.75 0 2.5-.75 2.5-2.5V5h-1l-1.5 3L5 4 4 5l4 5.5L5 12v1z'/%3E%3C/svg%3E")}}.maplibregl-ctrl button.maplibregl-ctrl-compass .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23333' viewBox='0 0 29 29'%3E%3Cpath d='m10.5 14 4-8 4 8z'/%3E%3Cpath fill='%23ccc' d='m10.5 16 4 8 4-8z'/%3E%3C/svg%3E")}@media (forced-colors:active){.maplibregl-ctrl button.maplibregl-ctrl-compass .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23fff' viewBox='0 0 29 29'%3E%3Cpath d='m10.5 14 4-8 4 8z'/%3E%3Cpath fill='%23ccc' d='m10.5 16 4 8 4-8z'/%3E%3C/svg%3E")}}@media (forced-colors:active) and (prefers-color-scheme:light){.maplibregl-ctrl button.maplibregl-ctrl-compass .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 29 29'%3E%3Cpath d='m10.5 14 4-8 4 8z'/%3E%3Cpath fill='%23ccc' d='m10.5 16 4 8 4-8z'/%3E%3C/svg%3E")}}.maplibregl-ctrl button.maplibregl-ctrl-globe .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='none' stroke='%23333' viewBox='0 0 22 22'%3E%3Ccircle cx='11' cy='11' r='8.5'/%3E%3Cpath d='M17.5 11c0 4.819-3.02 8.5-6.5 8.5S4.5 15.819 4.5 11 7.52 2.5 11 2.5s6.5 3.681 6.5 8.5Z'/%3E%3Cpath d='M13.5 11c0 2.447-.331 4.64-.853 6.206-.262.785-.562 1.384-.872 1.777-.314.399-.58.517-.775.517s-.461-.118-.775-.517c-.31-.393-.61-.992-.872-1.777C8.831 15.64 8.5 13.446 8.5 11s.331-4.64.853-6.206c.262-.785.562-1.384.872-1.777.314-.399.58-.517.775-.517s.461.118.775.517c.31.393.61.992.872 1.777.522 1.565.853 3.76.853 6.206Z'/%3E%3Cpath d='M11 7.5c-1.909 0-3.622-.166-4.845-.428-.616-.132-1.08-.283-1.379-.434a1.3 1.3 0 0 1-.224-.138q.07-.058.224-.138c.299-.151.763-.302 1.379-.434C7.378 5.666 9.091 5.5 11 5.5s3.622.166 4.845.428c.616.132 1.08.283 1.379.434.105.053.177.1.224.138q-.07.058-.224.138c-.299.151-.763.302-1.379.434-1.223.262-2.936.428-4.845.428ZM4.486 6.436ZM11 16.5c-1.909 0-3.622-.166-4.845-.428-.616-.132-1.08-.283-1.379-.434a1.3 1.3 0 0 1-.224-.138 1.3 1.3 0 0 1 .224-.138c.299-.151.763-.302 1.379-.434C7.378 14.666 9.091 14.5 11 14.5s3.622.166 4.845.428c.616.132 1.08.283 1.379.434.105.053.177.1.224.138a1.3 1.3 0 0 1-.224.138c-.299.151-.763.302-1.379.434-1.223.262-2.936.428-4.845.428Zm-6.514-1.064ZM11 12.5c-2.46 0-4.672-.222-6.255-.574-.796-.177-1.406-.38-1.805-.59a1.5 1.5 0 0 1-.39-.272.3.3 0 0 1-.047-.064.3.3 0 0 1 .048-.064c.066-.073.189-.167.389-.272.399-.21 1.009-.413 1.805-.59C6.328 9.722 8.54 9.5 11 9.5s4.672.222 6.256.574c.795.177 1.405.38 1.804.59.2.105.323.2.39.272a.3.3 0 0 1 .047.064.3.3 0 0 1-.048.064 1.4 1.4 0 0 1-.389.272c-.399.21-1.009.413-1.804.59-1.584.352-3.796.574-6.256.574Zm-8.501-1.51v.002zm0 .018v.002zm17.002.002v-.002zm0-.018v-.002z'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-globe-enabled .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='none' stroke='%2333b5e5' viewBox='0 0 22 22'%3E%3Ccircle cx='11' cy='11' r='8.5'/%3E%3Cpath d='M17.5 11c0 4.819-3.02 8.5-6.5 8.5S4.5 15.819 4.5 11 7.52 2.5 11 2.5s6.5 3.681 6.5 8.5Z'/%3E%3Cpath d='M13.5 11c0 2.447-.331 4.64-.853 6.206-.262.785-.562 1.384-.872 1.777-.314.399-.58.517-.775.517s-.461-.118-.775-.517c-.31-.393-.61-.992-.872-1.777C8.831 15.64 8.5 13.446 8.5 11s.331-4.64.853-6.206c.262-.785.562-1.384.872-1.777.314-.399.58-.517.775-.517s.461.118.775.517c.31.393.61.992.872 1.777.522 1.565.853 3.76.853 6.206Z'/%3E%3Cpath d='M11 7.5c-1.909 0-3.622-.166-4.845-.428-.616-.132-1.08-.283-1.379-.434a1.3 1.3 0 0 1-.224-.138q.07-.058.224-.138c.299-.151.763-.302 1.379-.434C7.378 5.666 9.091 5.5 11 5.5s3.622.166 4.845.428c.616.132 1.08.283 1.379.434.105.053.177.1.224.138q-.07.058-.224.138c-.299.151-.763.302-1.379.434-1.223.262-2.936.428-4.845.428ZM4.486 6.436ZM11 16.5c-1.909 0-3.622-.166-4.845-.428-.616-.132-1.08-.283-1.379-.434a1.3 1.3 0 0 1-.224-.138 1.3 1.3 0 0 1 .224-.138c.299-.151.763-.302 1.379-.434C7.378 14.666 9.091 14.5 11 14.5s3.622.166 4.845.428c.616.132 1.08.283 1.379.434.105.053.177.1.224.138a1.3 1.3 0 0 1-.224.138c-.299.151-.763.302-1.379.434-1.223.262-2.936.428-4.845.428Zm-6.514-1.064ZM11 12.5c-2.46 0-4.672-.222-6.255-.574-.796-.177-1.406-.38-1.805-.59a1.5 1.5 0 0 1-.39-.272.3.3 0 0 1-.047-.064.3.3 0 0 1 .048-.064c.066-.073.189-.167.389-.272.399-.21 1.009-.413 1.805-.59C6.328 9.722 8.54 9.5 11 9.5s4.672.222 6.256.574c.795.177 1.405.38 1.804.59.2.105.323.2.39.272a.3.3 0 0 1 .047.064.3.3 0 0 1-.048.064 1.4 1.4 0 0 1-.389.272c-.399.21-1.009.413-1.804.59-1.584.352-3.796.574-6.256.574Zm-8.501-1.51v.002zm0 .018v.002zm17.002.002v-.002zm0-.018v-.002z'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-terrain .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='%23333' viewBox='0 0 22 22'%3E%3Cpath d='m1.754 13.406 4.453-4.851 3.09 3.09 3.281 3.277.969-.969-3.309-3.312 3.844-4.121 6.148 6.886h1.082v-.855l-7.207-8.07-4.84 5.187L6.169 6.57l-5.48 5.965v.871ZM.688 16.844h20.625v1.375H.688Zm0 0'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-terrain-enabled .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' fill='%2333b5e5' viewBox='0 0 22 22'%3E%3Cpath d='m1.754 13.406 4.453-4.851 3.09 3.09 3.281 3.277.969-.969-3.309-3.312 3.844-4.121 6.148 6.886h1.082v-.855l-7.207-8.07-4.84 5.187L6.169 6.57l-5.48 5.965v.871ZM.688 16.844h20.625v1.375H.688Zm0 0'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23333' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate:disabled .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23aaa' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3Cpath fill='red' d='m14 5 1 1-9 9-1-1z'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%2333b5e5' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-active-error .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23e58978' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-background .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%2333b5e5' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-background-error .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23e54e33' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-waiting .maplibregl-ctrl-icon{animation:maplibregl-spin 2s linear infinite}@media (forced-colors:active){.maplibregl-ctrl button.maplibregl-ctrl-geolocate .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23fff' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate:disabled .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23999' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3Cpath fill='red' d='m14 5 1 1-9 9-1-1z'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%2333b5e5' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-active-error .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23e58978' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-background .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%2333b5e5' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate.maplibregl-ctrl-geolocate-background-error .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23e54e33' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3C/svg%3E")}}@media (forced-colors:active) and (prefers-color-scheme:light){.maplibregl-ctrl button.maplibregl-ctrl-geolocate .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/svg%3E")}.maplibregl-ctrl button.maplibregl-ctrl-geolocate:disabled .maplibregl-ctrl-icon{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23666' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3Cpath fill='red' d='m14 5 1 1-9 9-1-1z'/%3E%3C/svg%3E")}}@keyframes maplibregl-spin{0%{transform:rotate(0deg)}to{transform:rotate(1turn)}}a.maplibregl-ctrl-logo{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='23' fill='none'%3E%3Cpath fill='%23000' fill-opacity='.4' fill-rule='evenodd' d='M17.408 16.796h-1.827l2.501-12.095h.198l3.324 6.533.988 2.19.988-2.19 3.258-6.533h.181l2.6 12.095h-1.81l-1.218-5.644-.362-1.71-.658 1.71-2.929 5.644h-.098l-2.914-5.644-.757-1.71-.345 1.71zm1.958-3.42-.726 3.663a1.255 1.255 0 0 1-1.232 1.011h-1.827a1.255 1.255 0 0 1-1.229-1.509l2.501-12.095a1.255 1.255 0 0 1 1.23-1.001h.197a1.25 1.25 0 0 1 1.12.685l3.19 6.273 3.125-6.263a1.25 1.25 0 0 1 1.123-.695h.181a1.255 1.255 0 0 1 1.227.991l1.443 6.71a5 5 0 0 1 .314-.787l.009-.016a4.6 4.6 0 0 1 1.777-1.887c.782-.46 1.668-.667 2.611-.667a4.6 4.6 0 0 1 1.7.32l.306.134c.21-.16.474-.256.759-.256h1.694a1.255 1.255 0 0 1 1.212.925 1.255 1.255 0 0 1 1.212-.925h1.711c.284 0 .545.094.755.252.613-.3 1.312-.45 2.075-.45 1.356 0 2.557.445 3.482 1.4q.47.48.763 1.064V4.701a1.255 1.255 0 0 1 1.255-1.255h1.86A1.255 1.255 0 0 1 54.44 4.7v9.194h2.217c.19 0 .37.043.532.118v-4.77c0-.356.147-.678.385-.906a2.42 2.42 0 0 1-.682-1.71c0-.665.267-1.253.735-1.7a2.45 2.45 0 0 1 1.722-.674 2.43 2.43 0 0 1 1.705.675q.318.302.504.683V4.7a1.255 1.255 0 0 1 1.255-1.255h1.744A1.255 1.255 0 0 1 65.812 4.7v3.335a4.8 4.8 0 0 1 1.526-.246c.938 0 1.817.214 2.59.69a4.47 4.47 0 0 1 1.67 1.743v-.98a1.255 1.255 0 0 1 1.256-1.256h1.777c.233 0 .451.064.639.174a3.4 3.4 0 0 1 1.567-.372c.346 0 .861.02 1.285.232a1.25 1.25 0 0 1 .689 1.004 4.7 4.7 0 0 1 .853-.588c.795-.44 1.675-.647 2.61-.647 1.385 0 2.65.39 3.525 1.396.836.938 1.168 2.173 1.168 3.528q-.001.515-.056 1.051a1.255 1.255 0 0 1-.947 1.09l.408.952a1.255 1.255 0 0 1-.477 1.552c-.418.268-.92.463-1.458.612-.613.171-1.304.244-2.049.244-1.06 0-2.043-.207-2.886-.698l-.015-.008c-.798-.48-1.419-1.135-1.818-1.963l-.004-.008a5.8 5.8 0 0 1-.548-2.512q0-.429.053-.843a1.3 1.3 0 0 1-.333-.086l-.166-.004c-.223 0-.426.062-.643.228-.03.024-.142.139-.142.59v3.883a1.255 1.255 0 0 1-1.256 1.256h-1.777a1.255 1.255 0 0 1-1.256-1.256V15.69l-.032.057a4.8 4.8 0 0 1-1.86 1.833 5.04 5.04 0 0 1-2.484.634 4.5 4.5 0 0 1-1.935-.424 1.25 1.25 0 0 1-.764.258h-1.71a1.255 1.255 0 0 1-1.256-1.255V7.687a2.4 2.4 0 0 1-.428.625c.253.23.412.561.412.93v7.553a1.255 1.255 0 0 1-1.256 1.255h-1.843a1.25 1.25 0 0 1-.894-.373c-.228.23-.544.373-.894.373H51.32a1.255 1.255 0 0 1-1.256-1.255v-1.251l-.061.117a4.7 4.7 0 0 1-1.782 1.884 4.77 4.77 0 0 1-2.485.67 5.6 5.6 0 0 1-1.485-.188l.009 2.764a1.255 1.255 0 0 1-1.255 1.259h-1.729a1.255 1.255 0 0 1-1.255-1.255v-3.537a1.255 1.255 0 0 1-1.167.793h-1.679a1.25 1.25 0 0 1-.77-.263 4.5 4.5 0 0 1-1.945.429c-.885 0-1.724-.21-2.495-.632l-.017-.01a5 5 0 0 1-1.081-.836 1.255 1.255 0 0 1-1.254 1.312h-1.81a1.255 1.255 0 0 1-1.228-.99l-.782-3.625-2.044 3.939a1.25 1.25 0 0 1-1.115.676h-.098a1.25 1.25 0 0 1-1.116-.68l-2.061-3.994zM35.92 16.63l.207-.114.223-.15q.493-.356.735-.785l.061-.118.033 1.332h1.678V9.242h-1.694l-.033 1.267q-.133-.329-.526-.658l-.032-.028a3.2 3.2 0 0 0-.668-.428l-.27-.12a3.3 3.3 0 0 0-1.235-.23q-1.136-.001-1.974.493a3.36 3.36 0 0 0-1.3 1.382q-.445.89-.444 2.074 0 1.2.51 2.107a3.8 3.8 0 0 0 1.382 1.381 3.9 3.9 0 0 0 1.893.477q.795 0 1.455-.33zm-2.789-5.38q-.576.675-.575 1.762 0 1.102.559 1.794.576.675 1.645.675a2.25 2.25 0 0 0 .934-.19 2.2 2.2 0 0 0 .468-.29l.178-.161a2.2 2.2 0 0 0 .397-.561q.244-.5.244-1.15v-.115q0-.708-.296-1.267l-.043-.077a2.2 2.2 0 0 0-.633-.709l-.13-.086-.047-.028a2.1 2.1 0 0 0-1.073-.285q-1.052 0-1.629.692zm2.316 2.706c.163-.17.28-.407.28-.83v-.114c0-.292-.06-.508-.15-.68a.96.96 0 0 0-.353-.389.85.85 0 0 0-.464-.127c-.4 0-.56.114-.664.239l-.01.012c-.148.174-.275.45-.275.945 0 .506.122.801.27.99.097.11.266.224.68.224.303 0 .504-.09.687-.269zm7.545 1.705a2.6 2.6 0 0 0 .331.423q.319.33.755.548l.173.074q.65.255 1.49.255 1.02 0 1.844-.493a3.45 3.45 0 0 0 1.316-1.4q.493-.904.493-2.089 0-1.909-.988-2.913-.988-1.02-2.584-1.02-.898 0-1.575.347a3 3 0 0 0-.415.262l-.199.166a3.4 3.4 0 0 0-.64.82V9.242h-1.712v11.553h1.729l-.017-5.134zm.53-1.138q.206.29.48.5l.155.11.053.034q.51.296 1.119.297 1.07 0 1.645-.675.577-.69.576-1.762 0-1.119-.576-1.777-.558-.675-1.645-.675-.435 0-.835.16a2 2 0 0 0-.284.136 2 2 0 0 0-.363.254 2.2 2.2 0 0 0-.46.569l-.082.162a2.6 2.6 0 0 0-.213 1.072v.115q0 .707.296 1.267l.135.211zm.964-.818a1.1 1.1 0 0 0 .367.385.94.94 0 0 0 .476.118c.423 0 .59-.117.687-.23.159-.194.28-.478.28-.95 0-.53-.133-.8-.266-.952l-.021-.025c-.078-.094-.231-.221-.68-.221a1 1 0 0 0-.503.135l-.012.007a.86.86 0 0 0-.335.343c-.073.133-.132.324-.132.614v.115a1.4 1.4 0 0 0 .14.66zm15.7-6.222q.347-.346.346-.856a1.05 1.05 0 0 0-.345-.79 1.18 1.18 0 0 0-.84-.329q-.51 0-.855.33a1.05 1.05 0 0 0-.346.79q0 .51.346.855.345.346.856.346.51 0 .839-.346zm4.337 9.314.033-1.332q.191.403.59.747l.098.081a4 4 0 0 0 .316.224l.223.122a3.2 3.2 0 0 0 1.44.322 3.8 3.8 0 0 0 1.875-.477 3.5 3.5 0 0 0 1.382-1.366q.527-.89.526-2.09 0-1.184-.444-2.073a3.24 3.24 0 0 0-1.283-1.399q-.823-.51-1.942-.51a3.5 3.5 0 0 0-1.527.344l-.086.043-.165.09a3 3 0 0 0-.33.214q-.432.315-.656.707a2 2 0 0 0-.099.198l.082-1.283V4.701h-1.744v12.095zm.473-2.509a2.5 2.5 0 0 0 .566.7q.117.098.245.18l.144.08a2.1 2.1 0 0 0 .975.232q1.07 0 1.645-.675.576-.69.576-1.778 0-1.102-.576-1.777-.56-.691-1.645-.692a2.2 2.2 0 0 0-1.015.235q-.22.113-.415.282l-.15.142a2.1 2.1 0 0 0-.42.594q-.223.479-.223 1.1v.115q0 .705.293 1.26zm2.616-.293c.157-.191.28-.479.28-.967 0-.51-.13-.79-.276-.961l-.021-.026c-.082-.1-.232-.225-.67-.225a.87.87 0 0 0-.681.279l-.012.011c-.154.155-.274.38-.274.807v.115c0 .285.057.499.144.669a1.1 1.1 0 0 0 .367.405c.137.082.28.123.455.123.423 0 .59-.118.686-.23zm8.266-3.013q.345-.13.724-.14l.069-.002q.493 0 .642.099l.247-1.794q-.196-.099-.717-.099a2.3 2.3 0 0 0-.545.063 2 2 0 0 0-.411.148 2.2 2.2 0 0 0-.4.249 2.5 2.5 0 0 0-.485.499 2.7 2.7 0 0 0-.32.581l-.05.137v-1.48h-1.778v7.553h1.777v-3.884q0-.546.159-.943a1.5 1.5 0 0 1 .466-.636 2.5 2.5 0 0 1 .399-.253 2 2 0 0 1 .224-.099zm9.784 2.656.05-.922q0-1.743-.856-2.698-.838-.97-2.584-.97-1.119-.001-2.007.493a3.46 3.46 0 0 0-1.4 1.382q-.493.906-.493 2.106 0 1.07.428 1.975.428.89 1.332 1.432.906.526 2.255.526.973 0 1.668-.185l.044-.012.135-.04q.613-.184.984-.421l-.542-1.267q-.3.162-.642.274l-.297.087q-.51.131-1.3.131-.954 0-1.497-.444a1.6 1.6 0 0 1-.192-.193q-.366-.44-.512-1.234l-.004-.021zm-5.427-1.256-.003.022h3.752v-.138q-.011-.727-.288-1.118a1 1 0 0 0-.156-.176q-.46-.428-1.316-.428-.986 0-1.494.604-.379.45-.494 1.234zm-27.053 2.77V4.7h-1.86v12.095h5.333V15.15zm7.103-5.908v7.553h-1.843V9.242h1.843z'/%3E%3Cpath fill='%23fff' d='m19.63 11.151-.757-1.71-.345 1.71-1.12 5.644h-1.827L18.083 4.7h.197l3.325 6.533.988 2.19.988-2.19L26.839 4.7h.181l2.6 12.095h-1.81l-1.218-5.644-.362-1.71-.658 1.71-2.93 5.644h-.098l-2.913-5.644zm14.836 5.81q-1.02 0-1.893-.478a3.8 3.8 0 0 1-1.381-1.382q-.51-.906-.51-2.106 0-1.185.444-2.074a3.36 3.36 0 0 1 1.3-1.382q.839-.494 1.974-.494a3.3 3.3 0 0 1 1.234.231 3.3 3.3 0 0 1 .97.575q.396.33.527.659l.033-1.267h1.694v7.553H37.18l-.033-1.332q-.279.593-1.02 1.053a3.17 3.17 0 0 1-1.662.444zm.296-1.482q.938 0 1.58-.642.642-.66.642-1.711v-.115q0-.708-.296-1.267a2.2 2.2 0 0 0-.807-.872 2.1 2.1 0 0 0-1.119-.313q-1.053 0-1.629.692-.575.675-.575 1.76 0 1.103.559 1.795.577.675 1.645.675zm6.521-6.237h1.711v1.4q.906-1.597 2.83-1.597 1.596 0 2.584 1.02.988 1.005.988 2.914 0 1.185-.493 2.09a3.46 3.46 0 0 1-1.316 1.399 3.5 3.5 0 0 1-1.844.493q-.954 0-1.662-.329a2.67 2.67 0 0 1-1.086-.97l.017 5.134h-1.728zm4.048 6.22q1.07 0 1.645-.674.577-.69.576-1.762 0-1.119-.576-1.777-.558-.675-1.645-.675-.592 0-1.12.296-.51.28-.822.823-.296.527-.296 1.234v.115q0 .708.296 1.267.313.543.823.855.51.296 1.119.297z'/%3E%3Cpath fill='%23e1e3e9' d='M51.325 4.7h1.86v10.45h3.473v1.646h-5.333zm7.12 4.542h1.843v7.553h-1.843zm.905-1.415a1.16 1.16 0 0 1-.856-.346 1.17 1.17 0 0 1-.346-.856 1.05 1.05 0 0 1 .346-.79q.346-.329.856-.329.494 0 .839.33a1.05 1.05 0 0 1 .345.79 1.16 1.16 0 0 1-.345.855q-.33.346-.84.346zm7.875 9.133a3.17 3.17 0 0 1-1.662-.444q-.723-.46-1.004-1.053l-.033 1.332h-1.71V4.701h1.743v4.657l-.082 1.283q.279-.658 1.086-1.119a3.5 3.5 0 0 1 1.778-.477q1.119 0 1.942.51a3.24 3.24 0 0 1 1.283 1.4q.445.888.444 2.072 0 1.201-.526 2.09a3.5 3.5 0 0 1-1.382 1.366 3.8 3.8 0 0 1-1.876.477zm-.296-1.481q1.069 0 1.645-.675.577-.69.577-1.778 0-1.102-.577-1.776-.56-.691-1.645-.692a2.12 2.12 0 0 0-1.58.659q-.642.641-.642 1.694v.115q0 .71.296 1.267a2.4 2.4 0 0 0 .807.872 2.1 2.1 0 0 0 1.119.313zm5.927-6.237h1.777v1.481q.263-.757.856-1.217a2.14 2.14 0 0 1 1.349-.46q.527 0 .724.098l-.247 1.794q-.149-.099-.642-.099-.774 0-1.416.494-.626.493-.626 1.58v3.883h-1.777V9.242zm9.534 7.718q-1.35 0-2.255-.526-.904-.543-1.332-1.432a4.6 4.6 0 0 1-.428-1.975q0-1.2.493-2.106a3.46 3.46 0 0 1 1.4-1.382q.889-.495 2.007-.494 1.744 0 2.584.97.855.956.856 2.7 0 .444-.05.92h-5.43q.18 1.005.708 1.45.542.443 1.497.443.79 0 1.3-.131a4 4 0 0 0 .938-.362l.542 1.267q-.411.263-1.119.46-.708.198-1.711.197zm1.596-4.558q.016-1.02-.444-1.432-.46-.428-1.316-.428-1.728 0-1.991 1.86z'/%3E%3Cpath d='M5.074 15.948a.484.657 0 0 0-.486.659v1.84a.484.657 0 0 0 .486.659h4.101a.484.657 0 0 0 .486-.659v-1.84a.484.657 0 0 0-.486-.659zm3.56 1.16H5.617v.838h3.017z' style='fill:%23fff;fill-rule:evenodd;stroke-width:1.03600001'/%3E%3Cg style='stroke-width:1.12603545'%3E%3Cpath d='M-9.408-1.416c-3.833-.025-7.056 2.912-7.08 6.615-.02 3.08 1.653 4.832 3.107 6.268.903.892 1.721 1.74 2.32 2.902l-.525-.004c-.543-.003-.992.304-1.24.639a1.87 1.87 0 0 0-.362 1.121l-.011 1.877c-.003.402.104.787.347 1.125.244.338.688.653 1.23.656l4.142.028c.542.003.99-.306 1.238-.641a1.87 1.87 0 0 0 .363-1.121l.012-1.875a1.87 1.87 0 0 0-.348-1.127c-.243-.338-.688-.653-1.23-.656l-.518-.004c.597-1.145 1.425-1.983 2.348-2.87 1.473-1.414 3.18-3.149 3.2-6.226-.016-3.59-2.923-6.684-6.993-6.707m-.006 1.1v.002c3.274.02 5.92 2.532 5.9 5.6-.017 2.706-1.39 4.026-2.863 5.44-1.034.994-2.118 2.033-2.814 3.633-.018.041-.052.055-.075.065q-.013.004-.02.01a.34.34 0 0 1-.226.084.34.34 0 0 1-.224-.086l-.092-.077c-.699-1.615-1.768-2.669-2.781-3.67-1.454-1.435-2.797-2.762-2.78-5.478.02-3.067 2.7-5.545 5.975-5.523m-.02 2.826c-1.62-.01-2.944 1.315-2.955 2.96-.01 1.646 1.295 2.988 2.916 2.999h.002c1.621.01 2.943-1.316 2.953-2.961.011-1.646-1.294-2.988-2.916-2.998m-.005 1.1c1.017.006 1.829.83 1.822 1.89s-.83 1.874-1.848 1.867c-1.018-.006-1.829-.83-1.822-1.89s.83-1.874 1.848-1.868m-2.155 11.857 4.14.025c.271.002.49.305.487.676l-.013 1.875c-.003.37-.224.67-.495.668l-4.14-.025c-.27-.002-.487-.306-.485-.676l.012-1.875c.003-.37.224-.67.494-.668' style='color:%23000;font-style:normal;font-variant:normal;font-weight:400;font-stretch:normal;font-size:medium;line-height:normal;font-family:sans-serif;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-feature-settings:normal;text-indent:0;text-align:start;text-decoration:none;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:%23000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;text-anchor:start;white-space:normal;shape-padding:0;clip-rule:evenodd;display:inline;overflow:visible;visibility:visible;opacity:1;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:%23000;solid-opacity:1;vector-effect:none;fill:%23000;fill-opacity:.4;fill-rule:evenodd;stroke:none;stroke-width:2.47727823;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto' transform='translate(15.553 2.85)scale(.88807)'/%3E%3Cpath d='M-9.415-.316C-12.69-.338-15.37 2.14-15.39 5.207c-.017 2.716 1.326 4.041 2.78 5.477 1.013 1 2.081 2.055 2.78 3.67l.092.076a.34.34 0 0 0 .225.086.34.34 0 0 0 .227-.083l.019-.01c.022-.009.057-.024.074-.064.697-1.6 1.78-2.64 2.814-3.634 1.473-1.414 2.847-2.733 2.864-5.44.02-3.067-2.627-5.58-5.901-5.601m-.057 8.784c1.621.011 2.944-1.315 2.955-2.96.01-1.646-1.295-2.988-2.916-2.999-1.622-.01-2.945 1.315-2.955 2.96s1.295 2.989 2.916 3' style='clip-rule:evenodd;fill:%23e1e3e9;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:2.47727823;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:.4' transform='translate(15.553 2.85)scale(.88807)'/%3E%3Cpath d='M-11.594 15.465c-.27-.002-.492.297-.494.668l-.012 1.876c-.003.371.214.673.485.675l4.14.027c.271.002.492-.298.495-.668l.012-1.877c.003-.37-.215-.672-.485-.674z' style='clip-rule:evenodd;fill:%23fff;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:2.47727823;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:.4' transform='translate(15.553 2.85)scale(.88807)'/%3E%3C/g%3E%3C/svg%3E");background-repeat:no-repeat;cursor:pointer;display:block;height:23px;margin:0 0 -4px -4px;overflow:hidden;width:88px}a.maplibregl-ctrl-logo.maplibregl-compact{width:14px}@media (forced-colors:active){a.maplibregl-ctrl-logo{background-color:transparent;background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='23' fill='none'%3E%3Cpath fill='%23000' fill-opacity='.4' fill-rule='evenodd' d='M17.408 16.796h-1.827l2.501-12.095h.198l3.324 6.533.988 2.19.988-2.19 3.258-6.533h.181l2.6 12.095h-1.81l-1.218-5.644-.362-1.71-.658 1.71-2.929 5.644h-.098l-2.914-5.644-.757-1.71-.345 1.71zm1.958-3.42-.726 3.663a1.255 1.255 0 0 1-1.232 1.011h-1.827a1.255 1.255 0 0 1-1.229-1.509l2.501-12.095a1.255 1.255 0 0 1 1.23-1.001h.197a1.25 1.25 0 0 1 1.12.685l3.19 6.273 3.125-6.263a1.25 1.25 0 0 1 1.123-.695h.181a1.255 1.255 0 0 1 1.227.991l1.443 6.71a5 5 0 0 1 .314-.787l.009-.016a4.6 4.6 0 0 1 1.777-1.887c.782-.46 1.668-.667 2.611-.667a4.6 4.6 0 0 1 1.7.32l.306.134c.21-.16.474-.256.759-.256h1.694a1.255 1.255 0 0 1 1.212.925 1.255 1.255 0 0 1 1.212-.925h1.711c.284 0 .545.094.755.252.613-.3 1.312-.45 2.075-.45 1.356 0 2.557.445 3.482 1.4q.47.48.763 1.064V4.701a1.255 1.255 0 0 1 1.255-1.255h1.86A1.255 1.255 0 0 1 54.44 4.7v9.194h2.217c.19 0 .37.043.532.118v-4.77c0-.356.147-.678.385-.906a2.42 2.42 0 0 1-.682-1.71c0-.665.267-1.253.735-1.7a2.45 2.45 0 0 1 1.722-.674 2.43 2.43 0 0 1 1.705.675q.318.302.504.683V4.7a1.255 1.255 0 0 1 1.255-1.255h1.744A1.255 1.255 0 0 1 65.812 4.7v3.335a4.8 4.8 0 0 1 1.526-.246c.938 0 1.817.214 2.59.69a4.47 4.47 0 0 1 1.67 1.743v-.98a1.255 1.255 0 0 1 1.256-1.256h1.777c.233 0 .451.064.639.174a3.4 3.4 0 0 1 1.567-.372c.346 0 .861.02 1.285.232a1.25 1.25 0 0 1 .689 1.004 4.7 4.7 0 0 1 .853-.588c.795-.44 1.675-.647 2.61-.647 1.385 0 2.65.39 3.525 1.396.836.938 1.168 2.173 1.168 3.528q-.001.515-.056 1.051a1.255 1.255 0 0 1-.947 1.09l.408.952a1.255 1.255 0 0 1-.477 1.552c-.418.268-.92.463-1.458.612-.613.171-1.304.244-2.049.244-1.06 0-2.043-.207-2.886-.698l-.015-.008c-.798-.48-1.419-1.135-1.818-1.963l-.004-.008a5.8 5.8 0 0 1-.548-2.512q0-.429.053-.843a1.3 1.3 0 0 1-.333-.086l-.166-.004c-.223 0-.426.062-.643.228-.03.024-.142.139-.142.59v3.883a1.255 1.255 0 0 1-1.256 1.256h-1.777a1.255 1.255 0 0 1-1.256-1.256V15.69l-.032.057a4.8 4.8 0 0 1-1.86 1.833 5.04 5.04 0 0 1-2.484.634 4.5 4.5 0 0 1-1.935-.424 1.25 1.25 0 0 1-.764.258h-1.71a1.255 1.255 0 0 1-1.256-1.255V7.687a2.4 2.4 0 0 1-.428.625c.253.23.412.561.412.93v7.553a1.255 1.255 0 0 1-1.256 1.255h-1.843a1.25 1.25 0 0 1-.894-.373c-.228.23-.544.373-.894.373H51.32a1.255 1.255 0 0 1-1.256-1.255v-1.251l-.061.117a4.7 4.7 0 0 1-1.782 1.884 4.77 4.77 0 0 1-2.485.67 5.6 5.6 0 0 1-1.485-.188l.009 2.764a1.255 1.255 0 0 1-1.255 1.259h-1.729a1.255 1.255 0 0 1-1.255-1.255v-3.537a1.255 1.255 0 0 1-1.167.793h-1.679a1.25 1.25 0 0 1-.77-.263 4.5 4.5 0 0 1-1.945.429c-.885 0-1.724-.21-2.495-.632l-.017-.01a5 5 0 0 1-1.081-.836 1.255 1.255 0 0 1-1.254 1.312h-1.81a1.255 1.255 0 0 1-1.228-.99l-.782-3.625-2.044 3.939a1.25 1.25 0 0 1-1.115.676h-.098a1.25 1.25 0 0 1-1.116-.68l-2.061-3.994zM35.92 16.63l.207-.114.223-.15q.493-.356.735-.785l.061-.118.033 1.332h1.678V9.242h-1.694l-.033 1.267q-.133-.329-.526-.658l-.032-.028a3.2 3.2 0 0 0-.668-.428l-.27-.12a3.3 3.3 0 0 0-1.235-.23q-1.136-.001-1.974.493a3.36 3.36 0 0 0-1.3 1.382q-.445.89-.444 2.074 0 1.2.51 2.107a3.8 3.8 0 0 0 1.382 1.381 3.9 3.9 0 0 0 1.893.477q.795 0 1.455-.33zm-2.789-5.38q-.576.675-.575 1.762 0 1.102.559 1.794.576.675 1.645.675a2.25 2.25 0 0 0 .934-.19 2.2 2.2 0 0 0 .468-.29l.178-.161a2.2 2.2 0 0 0 .397-.561q.244-.5.244-1.15v-.115q0-.708-.296-1.267l-.043-.077a2.2 2.2 0 0 0-.633-.709l-.13-.086-.047-.028a2.1 2.1 0 0 0-1.073-.285q-1.052 0-1.629.692zm2.316 2.706c.163-.17.28-.407.28-.83v-.114c0-.292-.06-.508-.15-.68a.96.96 0 0 0-.353-.389.85.85 0 0 0-.464-.127c-.4 0-.56.114-.664.239l-.01.012c-.148.174-.275.45-.275.945 0 .506.122.801.27.99.097.11.266.224.68.224.303 0 .504-.09.687-.269zm7.545 1.705a2.6 2.6 0 0 0 .331.423q.319.33.755.548l.173.074q.65.255 1.49.255 1.02 0 1.844-.493a3.45 3.45 0 0 0 1.316-1.4q.493-.904.493-2.089 0-1.909-.988-2.913-.988-1.02-2.584-1.02-.898 0-1.575.347a3 3 0 0 0-.415.262l-.199.166a3.4 3.4 0 0 0-.64.82V9.242h-1.712v11.553h1.729l-.017-5.134zm.53-1.138q.206.29.48.5l.155.11.053.034q.51.296 1.119.297 1.07 0 1.645-.675.577-.69.576-1.762 0-1.119-.576-1.777-.558-.675-1.645-.675-.435 0-.835.16a2 2 0 0 0-.284.136 2 2 0 0 0-.363.254 2.2 2.2 0 0 0-.46.569l-.082.162a2.6 2.6 0 0 0-.213 1.072v.115q0 .707.296 1.267l.135.211zm.964-.818a1.1 1.1 0 0 0 .367.385.94.94 0 0 0 .476.118c.423 0 .59-.117.687-.23.159-.194.28-.478.28-.95 0-.53-.133-.8-.266-.952l-.021-.025c-.078-.094-.231-.221-.68-.221a1 1 0 0 0-.503.135l-.012.007a.86.86 0 0 0-.335.343c-.073.133-.132.324-.132.614v.115a1.4 1.4 0 0 0 .14.66zm15.7-6.222q.347-.346.346-.856a1.05 1.05 0 0 0-.345-.79 1.18 1.18 0 0 0-.84-.329q-.51 0-.855.33a1.05 1.05 0 0 0-.346.79q0 .51.346.855.345.346.856.346.51 0 .839-.346zm4.337 9.314.033-1.332q.191.403.59.747l.098.081a4 4 0 0 0 .316.224l.223.122a3.2 3.2 0 0 0 1.44.322 3.8 3.8 0 0 0 1.875-.477 3.5 3.5 0 0 0 1.382-1.366q.527-.89.526-2.09 0-1.184-.444-2.073a3.24 3.24 0 0 0-1.283-1.399q-.823-.51-1.942-.51a3.5 3.5 0 0 0-1.527.344l-.086.043-.165.09a3 3 0 0 0-.33.214q-.432.315-.656.707a2 2 0 0 0-.099.198l.082-1.283V4.701h-1.744v12.095zm.473-2.509a2.5 2.5 0 0 0 .566.7q.117.098.245.18l.144.08a2.1 2.1 0 0 0 .975.232q1.07 0 1.645-.675.576-.69.576-1.778 0-1.102-.576-1.777-.56-.691-1.645-.692a2.2 2.2 0 0 0-1.015.235q-.22.113-.415.282l-.15.142a2.1 2.1 0 0 0-.42.594q-.223.479-.223 1.1v.115q0 .705.293 1.26zm2.616-.293c.157-.191.28-.479.28-.967 0-.51-.13-.79-.276-.961l-.021-.026c-.082-.1-.232-.225-.67-.225a.87.87 0 0 0-.681.279l-.012.011c-.154.155-.274.38-.274.807v.115c0 .285.057.499.144.669a1.1 1.1 0 0 0 .367.405c.137.082.28.123.455.123.423 0 .59-.118.686-.23zm8.266-3.013q.345-.13.724-.14l.069-.002q.493 0 .642.099l.247-1.794q-.196-.099-.717-.099a2.3 2.3 0 0 0-.545.063 2 2 0 0 0-.411.148 2.2 2.2 0 0 0-.4.249 2.5 2.5 0 0 0-.485.499 2.7 2.7 0 0 0-.32.581l-.05.137v-1.48h-1.778v7.553h1.777v-3.884q0-.546.159-.943a1.5 1.5 0 0 1 .466-.636 2.5 2.5 0 0 1 .399-.253 2 2 0 0 1 .224-.099zm9.784 2.656.05-.922q0-1.743-.856-2.698-.838-.97-2.584-.97-1.119-.001-2.007.493a3.46 3.46 0 0 0-1.4 1.382q-.493.906-.493 2.106 0 1.07.428 1.975.428.89 1.332 1.432.906.526 2.255.526.973 0 1.668-.185l.044-.012.135-.04q.613-.184.984-.421l-.542-1.267q-.3.162-.642.274l-.297.087q-.51.131-1.3.131-.954 0-1.497-.444a1.6 1.6 0 0 1-.192-.193q-.366-.44-.512-1.234l-.004-.021zm-5.427-1.256-.003.022h3.752v-.138q-.011-.727-.288-1.118a1 1 0 0 0-.156-.176q-.46-.428-1.316-.428-.986 0-1.494.604-.379.45-.494 1.234zm-27.053 2.77V4.7h-1.86v12.095h5.333V15.15zm7.103-5.908v7.553h-1.843V9.242h1.843z'/%3E%3Cpath fill='%23fff' d='m19.63 11.151-.757-1.71-.345 1.71-1.12 5.644h-1.827L18.083 4.7h.197l3.325 6.533.988 2.19.988-2.19L26.839 4.7h.181l2.6 12.095h-1.81l-1.218-5.644-.362-1.71-.658 1.71-2.93 5.644h-.098l-2.913-5.644zm14.836 5.81q-1.02 0-1.893-.478a3.8 3.8 0 0 1-1.381-1.382q-.51-.906-.51-2.106 0-1.185.444-2.074a3.36 3.36 0 0 1 1.3-1.382q.839-.494 1.974-.494a3.3 3.3 0 0 1 1.234.231 3.3 3.3 0 0 1 .97.575q.396.33.527.659l.033-1.267h1.694v7.553H37.18l-.033-1.332q-.279.593-1.02 1.053a3.17 3.17 0 0 1-1.662.444zm.296-1.482q.938 0 1.58-.642.642-.66.642-1.711v-.115q0-.708-.296-1.267a2.2 2.2 0 0 0-.807-.872 2.1 2.1 0 0 0-1.119-.313q-1.053 0-1.629.692-.575.675-.575 1.76 0 1.103.559 1.795.577.675 1.645.675zm6.521-6.237h1.711v1.4q.906-1.597 2.83-1.597 1.596 0 2.584 1.02.988 1.005.988 2.914 0 1.185-.493 2.09a3.46 3.46 0 0 1-1.316 1.399 3.5 3.5 0 0 1-1.844.493q-.954 0-1.662-.329a2.67 2.67 0 0 1-1.086-.97l.017 5.134h-1.728zm4.048 6.22q1.07 0 1.645-.674.577-.69.576-1.762 0-1.119-.576-1.777-.558-.675-1.645-.675-.592 0-1.12.296-.51.28-.822.823-.296.527-.296 1.234v.115q0 .708.296 1.267.313.543.823.855.51.296 1.119.297z'/%3E%3Cpath fill='%23e1e3e9' d='M51.325 4.7h1.86v10.45h3.473v1.646h-5.333zm7.12 4.542h1.843v7.553h-1.843zm.905-1.415a1.16 1.16 0 0 1-.856-.346 1.17 1.17 0 0 1-.346-.856 1.05 1.05 0 0 1 .346-.79q.346-.329.856-.329.494 0 .839.33a1.05 1.05 0 0 1 .345.79 1.16 1.16 0 0 1-.345.855q-.33.346-.84.346zm7.875 9.133a3.17 3.17 0 0 1-1.662-.444q-.723-.46-1.004-1.053l-.033 1.332h-1.71V4.701h1.743v4.657l-.082 1.283q.279-.658 1.086-1.119a3.5 3.5 0 0 1 1.778-.477q1.119 0 1.942.51a3.24 3.24 0 0 1 1.283 1.4q.445.888.444 2.072 0 1.201-.526 2.09a3.5 3.5 0 0 1-1.382 1.366 3.8 3.8 0 0 1-1.876.477zm-.296-1.481q1.069 0 1.645-.675.577-.69.577-1.778 0-1.102-.577-1.776-.56-.691-1.645-.692a2.12 2.12 0 0 0-1.58.659q-.642.641-.642 1.694v.115q0 .71.296 1.267a2.4 2.4 0 0 0 .807.872 2.1 2.1 0 0 0 1.119.313zm5.927-6.237h1.777v1.481q.263-.757.856-1.217a2.14 2.14 0 0 1 1.349-.46q.527 0 .724.098l-.247 1.794q-.149-.099-.642-.099-.774 0-1.416.494-.626.493-.626 1.58v3.883h-1.777V9.242zm9.534 7.718q-1.35 0-2.255-.526-.904-.543-1.332-1.432a4.6 4.6 0 0 1-.428-1.975q0-1.2.493-2.106a3.46 3.46 0 0 1 1.4-1.382q.889-.495 2.007-.494 1.744 0 2.584.97.855.956.856 2.7 0 .444-.05.92h-5.43q.18 1.005.708 1.45.542.443 1.497.443.79 0 1.3-.131a4 4 0 0 0 .938-.362l.542 1.267q-.411.263-1.119.46-.708.198-1.711.197zm1.596-4.558q.016-1.02-.444-1.432-.46-.428-1.316-.428-1.728 0-1.991 1.86z'/%3E%3Cpath d='M5.074 15.948a.484.657 0 0 0-.486.659v1.84a.484.657 0 0 0 .486.659h4.101a.484.657 0 0 0 .486-.659v-1.84a.484.657 0 0 0-.486-.659zm3.56 1.16H5.617v.838h3.017z' style='fill:%23fff;fill-rule:evenodd;stroke-width:1.03600001'/%3E%3Cg style='stroke-width:1.12603545'%3E%3Cpath d='M-9.408-1.416c-3.833-.025-7.056 2.912-7.08 6.615-.02 3.08 1.653 4.832 3.107 6.268.903.892 1.721 1.74 2.32 2.902l-.525-.004c-.543-.003-.992.304-1.24.639a1.87 1.87 0 0 0-.362 1.121l-.011 1.877c-.003.402.104.787.347 1.125.244.338.688.653 1.23.656l4.142.028c.542.003.99-.306 1.238-.641a1.87 1.87 0 0 0 .363-1.121l.012-1.875a1.87 1.87 0 0 0-.348-1.127c-.243-.338-.688-.653-1.23-.656l-.518-.004c.597-1.145 1.425-1.983 2.348-2.87 1.473-1.414 3.18-3.149 3.2-6.226-.016-3.59-2.923-6.684-6.993-6.707m-.006 1.1v.002c3.274.02 5.92 2.532 5.9 5.6-.017 2.706-1.39 4.026-2.863 5.44-1.034.994-2.118 2.033-2.814 3.633-.018.041-.052.055-.075.065q-.013.004-.02.01a.34.34 0 0 1-.226.084.34.34 0 0 1-.224-.086l-.092-.077c-.699-1.615-1.768-2.669-2.781-3.67-1.454-1.435-2.797-2.762-2.78-5.478.02-3.067 2.7-5.545 5.975-5.523m-.02 2.826c-1.62-.01-2.944 1.315-2.955 2.96-.01 1.646 1.295 2.988 2.916 2.999h.002c1.621.01 2.943-1.316 2.953-2.961.011-1.646-1.294-2.988-2.916-2.998m-.005 1.1c1.017.006 1.829.83 1.822 1.89s-.83 1.874-1.848 1.867c-1.018-.006-1.829-.83-1.822-1.89s.83-1.874 1.848-1.868m-2.155 11.857 4.14.025c.271.002.49.305.487.676l-.013 1.875c-.003.37-.224.67-.495.668l-4.14-.025c-.27-.002-.487-.306-.485-.676l.012-1.875c.003-.37.224-.67.494-.668' style='color:%23000;font-style:normal;font-variant:normal;font-weight:400;font-stretch:normal;font-size:medium;line-height:normal;font-family:sans-serif;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-feature-settings:normal;text-indent:0;text-align:start;text-decoration:none;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:%23000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;text-anchor:start;white-space:normal;shape-padding:0;clip-rule:evenodd;display:inline;overflow:visible;visibility:visible;opacity:1;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:%23000;solid-opacity:1;vector-effect:none;fill:%23000;fill-opacity:.4;fill-rule:evenodd;stroke:none;stroke-width:2.47727823;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto' transform='translate(15.553 2.85)scale(.88807)'/%3E%3Cpath d='M-9.415-.316C-12.69-.338-15.37 2.14-15.39 5.207c-.017 2.716 1.326 4.041 2.78 5.477 1.013 1 2.081 2.055 2.78 3.67l.092.076a.34.34 0 0 0 .225.086.34.34 0 0 0 .227-.083l.019-.01c.022-.009.057-.024.074-.064.697-1.6 1.78-2.64 2.814-3.634 1.473-1.414 2.847-2.733 2.864-5.44.02-3.067-2.627-5.58-5.901-5.601m-.057 8.784c1.621.011 2.944-1.315 2.955-2.96.01-1.646-1.295-2.988-2.916-2.999-1.622-.01-2.945 1.315-2.955 2.96s1.295 2.989 2.916 3' style='clip-rule:evenodd;fill:%23e1e3e9;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:2.47727823;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:.4' transform='translate(15.553 2.85)scale(.88807)'/%3E%3Cpath d='M-11.594 15.465c-.27-.002-.492.297-.494.668l-.012 1.876c-.003.371.214.673.485.675l4.14.027c.271.002.492-.298.495-.668l.012-1.877c.003-.37-.215-.672-.485-.674z' style='clip-rule:evenodd;fill:%23fff;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:2.47727823;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:.4' transform='translate(15.553 2.85)scale(.88807)'/%3E%3C/g%3E%3C/svg%3E")}}@media (forced-colors:active) and (prefers-color-scheme:light){a.maplibregl-ctrl-logo{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='88' height='23' fill='none'%3E%3Cpath fill='%23000' fill-opacity='.4' fill-rule='evenodd' d='M17.408 16.796h-1.827l2.501-12.095h.198l3.324 6.533.988 2.19.988-2.19 3.258-6.533h.181l2.6 12.095h-1.81l-1.218-5.644-.362-1.71-.658 1.71-2.929 5.644h-.098l-2.914-5.644-.757-1.71-.345 1.71zm1.958-3.42-.726 3.663a1.255 1.255 0 0 1-1.232 1.011h-1.827a1.255 1.255 0 0 1-1.229-1.509l2.501-12.095a1.255 1.255 0 0 1 1.23-1.001h.197a1.25 1.25 0 0 1 1.12.685l3.19 6.273 3.125-6.263a1.25 1.25 0 0 1 1.123-.695h.181a1.255 1.255 0 0 1 1.227.991l1.443 6.71a5 5 0 0 1 .314-.787l.009-.016a4.6 4.6 0 0 1 1.777-1.887c.782-.46 1.668-.667 2.611-.667a4.6 4.6 0 0 1 1.7.32l.306.134c.21-.16.474-.256.759-.256h1.694a1.255 1.255 0 0 1 1.212.925 1.255 1.255 0 0 1 1.212-.925h1.711c.284 0 .545.094.755.252.613-.3 1.312-.45 2.075-.45 1.356 0 2.557.445 3.482 1.4q.47.48.763 1.064V4.701a1.255 1.255 0 0 1 1.255-1.255h1.86A1.255 1.255 0 0 1 54.44 4.7v9.194h2.217c.19 0 .37.043.532.118v-4.77c0-.356.147-.678.385-.906a2.42 2.42 0 0 1-.682-1.71c0-.665.267-1.253.735-1.7a2.45 2.45 0 0 1 1.722-.674 2.43 2.43 0 0 1 1.705.675q.318.302.504.683V4.7a1.255 1.255 0 0 1 1.255-1.255h1.744A1.255 1.255 0 0 1 65.812 4.7v3.335a4.8 4.8 0 0 1 1.526-.246c.938 0 1.817.214 2.59.69a4.47 4.47 0 0 1 1.67 1.743v-.98a1.255 1.255 0 0 1 1.256-1.256h1.777c.233 0 .451.064.639.174a3.4 3.4 0 0 1 1.567-.372c.346 0 .861.02 1.285.232a1.25 1.25 0 0 1 .689 1.004 4.7 4.7 0 0 1 .853-.588c.795-.44 1.675-.647 2.61-.647 1.385 0 2.65.39 3.525 1.396.836.938 1.168 2.173 1.168 3.528q-.001.515-.056 1.051a1.255 1.255 0 0 1-.947 1.09l.408.952a1.255 1.255 0 0 1-.477 1.552c-.418.268-.92.463-1.458.612-.613.171-1.304.244-2.049.244-1.06 0-2.043-.207-2.886-.698l-.015-.008c-.798-.48-1.419-1.135-1.818-1.963l-.004-.008a5.8 5.8 0 0 1-.548-2.512q0-.429.053-.843a1.3 1.3 0 0 1-.333-.086l-.166-.004c-.223 0-.426.062-.643.228-.03.024-.142.139-.142.59v3.883a1.255 1.255 0 0 1-1.256 1.256h-1.777a1.255 1.255 0 0 1-1.256-1.256V15.69l-.032.057a4.8 4.8 0 0 1-1.86 1.833 5.04 5.04 0 0 1-2.484.634 4.5 4.5 0 0 1-1.935-.424 1.25 1.25 0 0 1-.764.258h-1.71a1.255 1.255 0 0 1-1.256-1.255V7.687a2.4 2.4 0 0 1-.428.625c.253.23.412.561.412.93v7.553a1.255 1.255 0 0 1-1.256 1.255h-1.843a1.25 1.25 0 0 1-.894-.373c-.228.23-.544.373-.894.373H51.32a1.255 1.255 0 0 1-1.256-1.255v-1.251l-.061.117a4.7 4.7 0 0 1-1.782 1.884 4.77 4.77 0 0 1-2.485.67 5.6 5.6 0 0 1-1.485-.188l.009 2.764a1.255 1.255 0 0 1-1.255 1.259h-1.729a1.255 1.255 0 0 1-1.255-1.255v-3.537a1.255 1.255 0 0 1-1.167.793h-1.679a1.25 1.25 0 0 1-.77-.263 4.5 4.5 0 0 1-1.945.429c-.885 0-1.724-.21-2.495-.632l-.017-.01a5 5 0 0 1-1.081-.836 1.255 1.255 0 0 1-1.254 1.312h-1.81a1.255 1.255 0 0 1-1.228-.99l-.782-3.625-2.044 3.939a1.25 1.25 0 0 1-1.115.676h-.098a1.25 1.25 0 0 1-1.116-.68l-2.061-3.994zM35.92 16.63l.207-.114.223-.15q.493-.356.735-.785l.061-.118.033 1.332h1.678V9.242h-1.694l-.033 1.267q-.133-.329-.526-.658l-.032-.028a3.2 3.2 0 0 0-.668-.428l-.27-.12a3.3 3.3 0 0 0-1.235-.23q-1.136-.001-1.974.493a3.36 3.36 0 0 0-1.3 1.382q-.445.89-.444 2.074 0 1.2.51 2.107a3.8 3.8 0 0 0 1.382 1.381 3.9 3.9 0 0 0 1.893.477q.795 0 1.455-.33zm-2.789-5.38q-.576.675-.575 1.762 0 1.102.559 1.794.576.675 1.645.675a2.25 2.25 0 0 0 .934-.19 2.2 2.2 0 0 0 .468-.29l.178-.161a2.2 2.2 0 0 0 .397-.561q.244-.5.244-1.15v-.115q0-.708-.296-1.267l-.043-.077a2.2 2.2 0 0 0-.633-.709l-.13-.086-.047-.028a2.1 2.1 0 0 0-1.073-.285q-1.052 0-1.629.692zm2.316 2.706c.163-.17.28-.407.28-.83v-.114c0-.292-.06-.508-.15-.68a.96.96 0 0 0-.353-.389.85.85 0 0 0-.464-.127c-.4 0-.56.114-.664.239l-.01.012c-.148.174-.275.45-.275.945 0 .506.122.801.27.99.097.11.266.224.68.224.303 0 .504-.09.687-.269zm7.545 1.705a2.6 2.6 0 0 0 .331.423q.319.33.755.548l.173.074q.65.255 1.49.255 1.02 0 1.844-.493a3.45 3.45 0 0 0 1.316-1.4q.493-.904.493-2.089 0-1.909-.988-2.913-.988-1.02-2.584-1.02-.898 0-1.575.347a3 3 0 0 0-.415.262l-.199.166a3.4 3.4 0 0 0-.64.82V9.242h-1.712v11.553h1.729l-.017-5.134zm.53-1.138q.206.29.48.5l.155.11.053.034q.51.296 1.119.297 1.07 0 1.645-.675.577-.69.576-1.762 0-1.119-.576-1.777-.558-.675-1.645-.675-.435 0-.835.16a2 2 0 0 0-.284.136 2 2 0 0 0-.363.254 2.2 2.2 0 0 0-.46.569l-.082.162a2.6 2.6 0 0 0-.213 1.072v.115q0 .707.296 1.267l.135.211zm.964-.818a1.1 1.1 0 0 0 .367.385.94.94 0 0 0 .476.118c.423 0 .59-.117.687-.23.159-.194.28-.478.28-.95 0-.53-.133-.8-.266-.952l-.021-.025c-.078-.094-.231-.221-.68-.221a1 1 0 0 0-.503.135l-.012.007a.86.86 0 0 0-.335.343c-.073.133-.132.324-.132.614v.115a1.4 1.4 0 0 0 .14.66zm15.7-6.222q.347-.346.346-.856a1.05 1.05 0 0 0-.345-.79 1.18 1.18 0 0 0-.84-.329q-.51 0-.855.33a1.05 1.05 0 0 0-.346.79q0 .51.346.855.345.346.856.346.51 0 .839-.346zm4.337 9.314.033-1.332q.191.403.59.747l.098.081a4 4 0 0 0 .316.224l.223.122a3.2 3.2 0 0 0 1.44.322 3.8 3.8 0 0 0 1.875-.477 3.5 3.5 0 0 0 1.382-1.366q.527-.89.526-2.09 0-1.184-.444-2.073a3.24 3.24 0 0 0-1.283-1.399q-.823-.51-1.942-.51a3.5 3.5 0 0 0-1.527.344l-.086.043-.165.09a3 3 0 0 0-.33.214q-.432.315-.656.707a2 2 0 0 0-.099.198l.082-1.283V4.701h-1.744v12.095zm.473-2.509a2.5 2.5 0 0 0 .566.7q.117.098.245.18l.144.08a2.1 2.1 0 0 0 .975.232q1.07 0 1.645-.675.576-.69.576-1.778 0-1.102-.576-1.777-.56-.691-1.645-.692a2.2 2.2 0 0 0-1.015.235q-.22.113-.415.282l-.15.142a2.1 2.1 0 0 0-.42.594q-.223.479-.223 1.1v.115q0 .705.293 1.26zm2.616-.293c.157-.191.28-.479.28-.967 0-.51-.13-.79-.276-.961l-.021-.026c-.082-.1-.232-.225-.67-.225a.87.87 0 0 0-.681.279l-.012.011c-.154.155-.274.38-.274.807v.115c0 .285.057.499.144.669a1.1 1.1 0 0 0 .367.405c.137.082.28.123.455.123.423 0 .59-.118.686-.23zm8.266-3.013q.345-.13.724-.14l.069-.002q.493 0 .642.099l.247-1.794q-.196-.099-.717-.099a2.3 2.3 0 0 0-.545.063 2 2 0 0 0-.411.148 2.2 2.2 0 0 0-.4.249 2.5 2.5 0 0 0-.485.499 2.7 2.7 0 0 0-.32.581l-.05.137v-1.48h-1.778v7.553h1.777v-3.884q0-.546.159-.943a1.5 1.5 0 0 1 .466-.636 2.5 2.5 0 0 1 .399-.253 2 2 0 0 1 .224-.099zm9.784 2.656.05-.922q0-1.743-.856-2.698-.838-.97-2.584-.97-1.119-.001-2.007.493a3.46 3.46 0 0 0-1.4 1.382q-.493.906-.493 2.106 0 1.07.428 1.975.428.89 1.332 1.432.906.526 2.255.526.973 0 1.668-.185l.044-.012.135-.04q.613-.184.984-.421l-.542-1.267q-.3.162-.642.274l-.297.087q-.51.131-1.3.131-.954 0-1.497-.444a1.6 1.6 0 0 1-.192-.193q-.366-.44-.512-1.234l-.004-.021zm-5.427-1.256-.003.022h3.752v-.138q-.011-.727-.288-1.118a1 1 0 0 0-.156-.176q-.46-.428-1.316-.428-.986 0-1.494.604-.379.45-.494 1.234zm-27.053 2.77V4.7h-1.86v12.095h5.333V15.15zm7.103-5.908v7.553h-1.843V9.242h1.843z'/%3E%3Cpath fill='%23fff' d='m19.63 11.151-.757-1.71-.345 1.71-1.12 5.644h-1.827L18.083 4.7h.197l3.325 6.533.988 2.19.988-2.19L26.839 4.7h.181l2.6 12.095h-1.81l-1.218-5.644-.362-1.71-.658 1.71-2.93 5.644h-.098l-2.913-5.644zm14.836 5.81q-1.02 0-1.893-.478a3.8 3.8 0 0 1-1.381-1.382q-.51-.906-.51-2.106 0-1.185.444-2.074a3.36 3.36 0 0 1 1.3-1.382q.839-.494 1.974-.494a3.3 3.3 0 0 1 1.234.231 3.3 3.3 0 0 1 .97.575q.396.33.527.659l.033-1.267h1.694v7.553H37.18l-.033-1.332q-.279.593-1.02 1.053a3.17 3.17 0 0 1-1.662.444zm.296-1.482q.938 0 1.58-.642.642-.66.642-1.711v-.115q0-.708-.296-1.267a2.2 2.2 0 0 0-.807-.872 2.1 2.1 0 0 0-1.119-.313q-1.053 0-1.629.692-.575.675-.575 1.76 0 1.103.559 1.795.577.675 1.645.675zm6.521-6.237h1.711v1.4q.906-1.597 2.83-1.597 1.596 0 2.584 1.02.988 1.005.988 2.914 0 1.185-.493 2.09a3.46 3.46 0 0 1-1.316 1.399 3.5 3.5 0 0 1-1.844.493q-.954 0-1.662-.329a2.67 2.67 0 0 1-1.086-.97l.017 5.134h-1.728zm4.048 6.22q1.07 0 1.645-.674.577-.69.576-1.762 0-1.119-.576-1.777-.558-.675-1.645-.675-.592 0-1.12.296-.51.28-.822.823-.296.527-.296 1.234v.115q0 .708.296 1.267.313.543.823.855.51.296 1.119.297z'/%3E%3Cpath fill='%23e1e3e9' d='M51.325 4.7h1.86v10.45h3.473v1.646h-5.333zm7.12 4.542h1.843v7.553h-1.843zm.905-1.415a1.16 1.16 0 0 1-.856-.346 1.17 1.17 0 0 1-.346-.856 1.05 1.05 0 0 1 .346-.79q.346-.329.856-.329.494 0 .839.33a1.05 1.05 0 0 1 .345.79 1.16 1.16 0 0 1-.345.855q-.33.346-.84.346zm7.875 9.133a3.17 3.17 0 0 1-1.662-.444q-.723-.46-1.004-1.053l-.033 1.332h-1.71V4.701h1.743v4.657l-.082 1.283q.279-.658 1.086-1.119a3.5 3.5 0 0 1 1.778-.477q1.119 0 1.942.51a3.24 3.24 0 0 1 1.283 1.4q.445.888.444 2.072 0 1.201-.526 2.09a3.5 3.5 0 0 1-1.382 1.366 3.8 3.8 0 0 1-1.876.477zm-.296-1.481q1.069 0 1.645-.675.577-.69.577-1.778 0-1.102-.577-1.776-.56-.691-1.645-.692a2.12 2.12 0 0 0-1.58.659q-.642.641-.642 1.694v.115q0 .71.296 1.267a2.4 2.4 0 0 0 .807.872 2.1 2.1 0 0 0 1.119.313zm5.927-6.237h1.777v1.481q.263-.757.856-1.217a2.14 2.14 0 0 1 1.349-.46q.527 0 .724.098l-.247 1.794q-.149-.099-.642-.099-.774 0-1.416.494-.626.493-.626 1.58v3.883h-1.777V9.242zm9.534 7.718q-1.35 0-2.255-.526-.904-.543-1.332-1.432a4.6 4.6 0 0 1-.428-1.975q0-1.2.493-2.106a3.46 3.46 0 0 1 1.4-1.382q.889-.495 2.007-.494 1.744 0 2.584.97.855.956.856 2.7 0 .444-.05.92h-5.43q.18 1.005.708 1.45.542.443 1.497.443.79 0 1.3-.131a4 4 0 0 0 .938-.362l.542 1.267q-.411.263-1.119.46-.708.198-1.711.197zm1.596-4.558q.016-1.02-.444-1.432-.46-.428-1.316-.428-1.728 0-1.991 1.86z'/%3E%3Cpath d='M5.074 15.948a.484.657 0 0 0-.486.659v1.84a.484.657 0 0 0 .486.659h4.101a.484.657 0 0 0 .486-.659v-1.84a.484.657 0 0 0-.486-.659zm3.56 1.16H5.617v.838h3.017z' style='fill:%23fff;fill-rule:evenodd;stroke-width:1.03600001'/%3E%3Cg style='stroke-width:1.12603545'%3E%3Cpath d='M-9.408-1.416c-3.833-.025-7.056 2.912-7.08 6.615-.02 3.08 1.653 4.832 3.107 6.268.903.892 1.721 1.74 2.32 2.902l-.525-.004c-.543-.003-.992.304-1.24.639a1.87 1.87 0 0 0-.362 1.121l-.011 1.877c-.003.402.104.787.347 1.125.244.338.688.653 1.23.656l4.142.028c.542.003.99-.306 1.238-.641a1.87 1.87 0 0 0 .363-1.121l.012-1.875a1.87 1.87 0 0 0-.348-1.127c-.243-.338-.688-.653-1.23-.656l-.518-.004c.597-1.145 1.425-1.983 2.348-2.87 1.473-1.414 3.18-3.149 3.2-6.226-.016-3.59-2.923-6.684-6.993-6.707m-.006 1.1v.002c3.274.02 5.92 2.532 5.9 5.6-.017 2.706-1.39 4.026-2.863 5.44-1.034.994-2.118 2.033-2.814 3.633-.018.041-.052.055-.075.065q-.013.004-.02.01a.34.34 0 0 1-.226.084.34.34 0 0 1-.224-.086l-.092-.077c-.699-1.615-1.768-2.669-2.781-3.67-1.454-1.435-2.797-2.762-2.78-5.478.02-3.067 2.7-5.545 5.975-5.523m-.02 2.826c-1.62-.01-2.944 1.315-2.955 2.96-.01 1.646 1.295 2.988 2.916 2.999h.002c1.621.01 2.943-1.316 2.953-2.961.011-1.646-1.294-2.988-2.916-2.998m-.005 1.1c1.017.006 1.829.83 1.822 1.89s-.83 1.874-1.848 1.867c-1.018-.006-1.829-.83-1.822-1.89s.83-1.874 1.848-1.868m-2.155 11.857 4.14.025c.271.002.49.305.487.676l-.013 1.875c-.003.37-.224.67-.495.668l-4.14-.025c-.27-.002-.487-.306-.485-.676l.012-1.875c.003-.37.224-.67.494-.668' style='color:%23000;font-style:normal;font-variant:normal;font-weight:400;font-stretch:normal;font-size:medium;line-height:normal;font-family:sans-serif;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-feature-settings:normal;text-indent:0;text-align:start;text-decoration:none;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:%23000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;text-anchor:start;white-space:normal;shape-padding:0;clip-rule:evenodd;display:inline;overflow:visible;visibility:visible;opacity:1;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:%23000;solid-opacity:1;vector-effect:none;fill:%23000;fill-opacity:.4;fill-rule:evenodd;stroke:none;stroke-width:2.47727823;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto' transform='translate(15.553 2.85)scale(.88807)'/%3E%3Cpath d='M-9.415-.316C-12.69-.338-15.37 2.14-15.39 5.207c-.017 2.716 1.326 4.041 2.78 5.477 1.013 1 2.081 2.055 2.78 3.67l.092.076a.34.34 0 0 0 .225.086.34.34 0 0 0 .227-.083l.019-.01c.022-.009.057-.024.074-.064.697-1.6 1.78-2.64 2.814-3.634 1.473-1.414 2.847-2.733 2.864-5.44.02-3.067-2.627-5.58-5.901-5.601m-.057 8.784c1.621.011 2.944-1.315 2.955-2.96.01-1.646-1.295-2.988-2.916-2.999-1.622-.01-2.945 1.315-2.955 2.96s1.295 2.989 2.916 3' style='clip-rule:evenodd;fill:%23e1e3e9;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:2.47727823;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:.4' transform='translate(15.553 2.85)scale(.88807)'/%3E%3Cpath d='M-11.594 15.465c-.27-.002-.492.297-.494.668l-.012 1.876c-.003.371.214.673.485.675l4.14.027c.271.002.492-.298.495-.668l.012-1.877c.003-.37-.215-.672-.485-.674z' style='clip-rule:evenodd;fill:%23fff;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:2.47727823;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:.4' transform='translate(15.553 2.85)scale(.88807)'/%3E%3C/g%3E%3C/svg%3E")}}.maplibregl-ctrl.maplibregl-ctrl-attrib{background-color:hsla(0,0%,100%,.5);margin:0;padding:0 5px}@media screen{.maplibregl-ctrl-attrib.maplibregl-compact{background-color:#fff;border-radius:12px;box-sizing:content-box;color:#000;margin:10px;min-height:20px;padding:2px 24px 2px 0;position:relative}.maplibregl-ctrl-attrib.maplibregl-compact-show{padding:2px 28px 2px 8px;visibility:visible}.maplibregl-ctrl-bottom-left>.maplibregl-ctrl-attrib.maplibregl-compact-show,.maplibregl-ctrl-top-left>.maplibregl-ctrl-attrib.maplibregl-compact-show{border-radius:12px;padding:2px 8px 2px 28px}.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-inner{display:none}.maplibregl-ctrl-attrib-button{background-color:hsla(0,0%,100%,.5);background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill-rule='evenodd' viewBox='0 0 20 20'%3E%3Cpath d='M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0'/%3E%3C/svg%3E");border:0;border-radius:12px;box-sizing:border-box;cursor:pointer;display:none;height:24px;outline:none;position:absolute;right:0;top:0;width:24px}.maplibregl-ctrl-attrib summary.maplibregl-ctrl-attrib-button{-webkit-appearance:none;-moz-appearance:none;appearance:none;list-style:none}.maplibregl-ctrl-attrib summary.maplibregl-ctrl-attrib-button::-webkit-details-marker{display:none}.maplibregl-ctrl-bottom-left .maplibregl-ctrl-attrib-button,.maplibregl-ctrl-top-left .maplibregl-ctrl-attrib-button{left:0}.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button,.maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-inner{display:block}.maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button{background-color:rgba(0,0,0,.05)}.maplibregl-ctrl-bottom-right>.maplibregl-ctrl-attrib.maplibregl-compact:after{bottom:0;right:0}.maplibregl-ctrl-top-right>.maplibregl-ctrl-attrib.maplibregl-compact:after{right:0;top:0}.maplibregl-ctrl-top-left>.maplibregl-ctrl-attrib.maplibregl-compact:after{left:0;top:0}.maplibregl-ctrl-bottom-left>.maplibregl-ctrl-attrib.maplibregl-compact:after{bottom:0;left:0}}@media screen and (forced-colors:active){.maplibregl-ctrl-attrib.maplibregl-compact:after{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='%23fff' fill-rule='evenodd' viewBox='0 0 20 20'%3E%3Cpath d='M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0'/%3E%3C/svg%3E")}}@media screen and (forced-colors:active) and (prefers-color-scheme:light){.maplibregl-ctrl-attrib.maplibregl-compact:after{background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill-rule='evenodd' viewBox='0 0 20 20'%3E%3Cpath d='M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0'/%3E%3C/svg%3E")}}.maplibregl-ctrl-attrib a{color:rgba(0,0,0,.75);text-decoration:none}.maplibregl-ctrl-attrib a:hover{color:inherit;text-decoration:underline}.maplibregl-attrib-empty{display:none}.maplibregl-ctrl-scale{background-color:hsla(0,0%,100%,.75);border:2px solid #333;border-top:#333;box-sizing:border-box;color:#333;font-size:10px;padding:0 5px;white-space:nowrap}.maplibregl-popup{display:flex;left:0;pointer-events:none;position:absolute;top:0;will-change:transform}.maplibregl-popup-anchor-top,.maplibregl-popup-anchor-top-left,.maplibregl-popup-anchor-top-right{flex-direction:column}.maplibregl-popup-anchor-bottom,.maplibregl-popup-anchor-bottom-left,.maplibregl-popup-anchor-bottom-right{flex-direction:column-reverse}.maplibregl-popup-anchor-left{flex-direction:row}.maplibregl-popup-anchor-right{flex-direction:row-reverse}.maplibregl-popup-tip{border:10px solid transparent;height:0;width:0;z-index:1}.maplibregl-popup-anchor-top .maplibregl-popup-tip{align-self:center;border-bottom-color:#fff;border-top:none}.maplibregl-popup-anchor-top-left .maplibregl-popup-tip{align-self:flex-start;border-bottom-color:#fff;border-left:none;border-top:none}.maplibregl-popup-anchor-top-right .maplibregl-popup-tip{align-self:flex-end;border-bottom-color:#fff;border-right:none;border-top:none}.maplibregl-popup-anchor-bottom .maplibregl-popup-tip{align-self:center;border-bottom:none;border-top-color:#fff}.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip{align-self:flex-start;border-bottom:none;border-left:none;border-top-color:#fff}.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip{align-self:flex-end;border-bottom:none;border-right:none;border-top-color:#fff}.maplibregl-popup-anchor-left .maplibregl-popup-tip{align-self:center;border-left:none;border-right-color:#fff}.maplibregl-popup-anchor-right .maplibregl-popup-tip{align-self:center;border-left-color:#fff;border-right:none}[dir=rtl] .maplibregl-popup-anchor-left{flex-direction:row-reverse}[dir=rtl] .maplibregl-popup-anchor-right{flex-direction:row}[dir=rtl] .maplibregl-popup-anchor-top-left .maplibregl-popup-tip{align-self:flex-end}[dir=rtl] .maplibregl-popup-anchor-top-right .maplibregl-popup-tip{align-self:flex-start}[dir=rtl] .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip{align-self:flex-end}[dir=rtl] .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip{align-self:flex-start}.maplibregl-popup-close-button{background-color:transparent;border:0;border-radius:0 3px 0 0;cursor:pointer;position:absolute;right:0;top:0}.maplibregl-popup-close-button:hover{background-color:rgba(0,0,0,.05)}.maplibregl-popup-content{background:#fff;border-radius:3px;box-shadow:0 1px 2px rgba(0,0,0,.1);padding:15px 10px;pointer-events:auto;position:relative}.maplibregl-popup-anchor-top-left .maplibregl-popup-content{border-top-left-radius:0}.maplibregl-popup-anchor-top-right .maplibregl-popup-content{border-top-right-radius:0}.maplibregl-popup-anchor-bottom-left .maplibregl-popup-content{border-bottom-left-radius:0}.maplibregl-popup-anchor-bottom-right .maplibregl-popup-content{border-bottom-right-radius:0}.maplibregl-popup-track-pointer{display:none}.maplibregl-popup-track-pointer *{pointer-events:none;-webkit-user-select:none;-moz-user-select:none;user-select:none}.maplibregl-map:hover .maplibregl-popup-track-pointer{display:flex}.maplibregl-map:active .maplibregl-popup-track-pointer{display:none}.maplibregl-marker{left:0;position:absolute;top:0;transition:opacity .2s;will-change:transform}.maplibregl-user-location-dot,.maplibregl-user-location-dot:before{background-color:#1da1f2;border-radius:50%;height:15px;width:15px}.maplibregl-user-location-dot:before{animation:maplibregl-user-location-dot-pulse 2s infinite;content:"";position:absolute}.maplibregl-user-location-dot:after{border:2px solid #fff;border-radius:50%;box-shadow:0 0 3px rgba(0,0,0,.35);box-sizing:border-box;content:"";height:19px;left:-2px;position:absolute;top:-2px;width:19px}@media (prefers-reduced-motion:reduce){.maplibregl-user-location-dot:before{animation:none}}@keyframes maplibregl-user-location-dot-pulse{0%{opacity:1;transform:scale(1)}70%{opacity:0;transform:scale(3)}to{opacity:0;transform:scale(1)}}.maplibregl-user-location-dot-stale{background-color:#aaa}.maplibregl-user-location-dot-stale:after{display:none}.maplibregl-user-location-accuracy-circle{background-color:#1da1f233;border-radius:100%;height:1px;width:1px}.maplibregl-crosshair,.maplibregl-crosshair .maplibregl-interactive,.maplibregl-crosshair .maplibregl-interactive:active{cursor:crosshair}.maplibregl-boxzoom{background:#fff;border:2px dotted #202020;height:0;left:0;opacity:.5;position:absolute;top:0;width:0}.maplibregl-cooperative-gesture-screen{align-items:center;background:rgba(0,0,0,.4);color:#fff;display:flex;font-size:1.4em;inset:0;justify-content:center;line-height:1.2;opacity:0;padding:1rem;pointer-events:none;position:absolute;transition:opacity 1s ease 1s;z-index:99999}.maplibregl-cooperative-gesture-screen.maplibregl-show{opacity:1;transition:opacity .05s}.maplibregl-cooperative-gesture-screen .maplibregl-mobile-message{display:none}@media (hover:none),(pointer:coarse){.maplibregl-cooperative-gesture-screen .maplibregl-desktop-message{display:none}.maplibregl-cooperative-gesture-screen .maplibregl-mobile-message{display:block}}.maplibregl-pseudo-fullscreen{height:100%!important;left:0!important;position:fixed!important;top:0!important;width:100%!important;z-index:99999}</style>
+
+<canvas id="globe" tabindex="0" aria-label="Interactive 3D globe. Drag to rotate, scroll or pinch to zoom, right-drag or two-finger twist to tilt and turn."></canvas>
+<canvas id="labels" aria-hidden="true"></canvas>
+<div id="map" aria-label="Street map"></div>
+
+<div class="topbar">
+  <div class="search" id="search">
+    <div class="search-box">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input id="q" type="search" placeholder="Search countries, states, cities" autocomplete="off" spellcheck="false"
+             role="combobox" aria-expanded="false" aria-controls="results" aria-autocomplete="list" aria-label="Search places">
+      <button class="clear" id="clear" type="button" aria-label="Clear search" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <ul class="results" id="results" role="listbox" hidden></ul>
+  </div>
+  <label class="labels-toggle">
+    <input type="checkbox" id="showLabels" checked>
+    <span class="track" aria-hidden="true"><span class="knob"></span></span>
+    <span>Show labels</span>
+  </label>
+</div>
+
+<div class="controls">
+  <button class="fab" id="sunBtn" type="button" aria-label="Lighting and clouds" aria-expanded="false" aria-controls="panel">
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5 1 3h-2l1-3zm0 20-1-3h2l-1 3zM2 12l3-1v2l-3-1zm20 0-3 1v-2l3 1zM4.93 4.93l2.83 1.42-1.41 1.41-1.42-2.83zm14.14 14.14-2.83-1.42 1.41-1.41 1.42 2.83zM4.93 19.07l1.42-2.83 1.41 1.41-2.83 1.42zM19.07 4.93l-1.42 2.83-1.41-1.41 2.83-1.42z"/></svg>
+  </button>
+  <button class="fab" id="compass" type="button" aria-label="Point north">
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><g id="needle"><path d="M13 3.5 16.2 13H9.8z" fill="#d93025"/><path d="M13 22.5 9.8 13h6.4z" fill="#9aa0a6"/></g></svg>
+  </button>
+  <button class="fab" id="tiltBtn" type="button" aria-pressed="false" aria-label="Tilt view">3D</button>
+  <div class="zoom">
+    <button id="zin" type="button" aria-label="Zoom in">+</button>
+    <button id="zout" type="button" aria-label="Zoom out">&minus;</button>
+  </div>
+</div>
+
+<div class="panel" id="panel" hidden role="dialog" aria-label="Lighting">
+  <h2>Sunlight</h2>
+  <div class="seg" role="group" aria-label="Light source">
+    <button type="button" id="modeStudio" aria-pressed="true">Daylight view</button>
+    <button type="button" id="modeLive" aria-pressed="false">Real sun</button>
+  </div>
+  <div class="row"><span>Time</span><output id="timeOut">Now</output></div>
+  <input type="range" id="time" min="-24" max="24" step="0.25" value="0" aria-label="Shift time in hours" disabled>
+  <div class="row"><button class="now" id="nowBtn" type="button" disabled>Back to now</button><output id="subsolar"></output></div>
+  <label class="check"><span>Clouds</span><input type="checkbox" id="clouds" checked></label>
+  <label class="check"><span>Borders</span><input type="checkbox" id="borders" checked></label>
+  <p id="lightNote">Daylight view keeps the whole face of the globe lit, like Google Earth's default. Real sun places the terminator and city lights for the actual time.</p>
+</div>
+
+<div class="hud">
+  <div class="attrib"><span class="hint" id="hint">Drag to rotate · Scroll or pinch to zoom · Right-drag to tilt</span><span class="src" id="src">Imagery: NASA Blue Marble &amp; Black Marble · Map data: Natural Earth, PSA boundaries</span></div>
+  <div class="readout">
+    <span id="cursor"></span>
+    <span id="alt">Camera —</span>
+    <span class="scale"><span id="scaleTxt">—</span><span class="bar" id="scaleBar" style="width:60px"></span></span>
+  </div>
+</div>
+
+<div id="loading"><div class="load-box"><span id="loadTxt">Loading Earth imagery</span><span class="load-bar"><i id="loadBar"></i></span></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = (s) => document.querySelector(s);
+const loadTxt = $('#loadTxt'), loadBar = $('#loadBar');
+function fail(msg) {
+  loadTxt.innerHTML = '';
+  const s = document.createElement('span'); s.className = 'err'; s.textContent = msg; loadTxt.appendChild(s);
+  loadBar.parentElement.hidden = true;
+}
+if (!window.THREE) { fail('The 3D engine could not load. Check your connection and reload the page.'); return; }
+
+const V3 = THREE.Vector3;
+const DEG = Math.PI / 180, EARTH_KM = 6371;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const coarse = matchMedia('(pointer: coarse)').matches;
+
+/* ---------------- renderer ---------------- */
+const canvas = $('#globe');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
+} catch (e) {
+  fail('This browser could not start WebGL, which the globe needs. Try a current Chrome, Edge, Safari or Firefox with hardware acceleration on.');
+  return;
+}
+const caps = renderer.capabilities;
+const DPR = Math.min(window.devicePixelRatio || 1, coarse ? 1.75 : 2);
+renderer.setPixelRatio(DPR);
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+renderer.autoClear = false;
+const hdr = caps.isWebGL2 && (renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float'));
+const rt = new THREE.WebGLRenderTarget(4, 4, {
+  type: hdr ? THREE.HalfFloatType : THREE.UnsignedByteType,
+  samples: caps.isWebGL2 ? 4 : 0,
+  depthBuffer: true,
+});
+const maxAniso = Math.min(8, caps.getMaxAnisotropy());
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 50);
+const skyScene = new THREE.Scene();
+const skyCam = new THREE.PerspectiveCamera(35, 1, 1, 2000);
+const postScene = new THREE.Scene();
+const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+/* ---------------- geo helpers ---------------- */
+function llv(lat, lon, r = 1, out = new V3()) {
+  const cl = Math.cos(lat * DEG);
+  return out.set(cl * Math.cos(lon * DEG) * r, Math.sin(lat * DEG) * r, -cl * Math.sin(lon * DEG) * r);
+}
+function vll(v) {
+  const r = v.length();
+  return { lat: Math.asin(clamp(v.y / r, -1, 1)) / DEG, lon: Math.atan2(-v.z, v.x) / DEG };
+}
+
+/* ---------------- shared atmosphere model ----------------
+   Planet radius = 1. The atmosphere is a little thicker than the real 1.6% so the limb
+   glow reads at globe scale, as it does in Google Earth. */
+const U = {
+  uSunDir: { value: new V3(1, 0.3, 0.4).normalize() },
+  uBetaR: { value: new V3(4.7, 11.2, 26.5) },
+  uBetaM: { value: 2.6 },
+  uHR: { value: 0.0040 },
+  uHM: { value: 0.0011 },
+  uSunI: { value: 19.0 },
+  uCamPos: { value: new V3() },
+  uCloudShift: { value: 0 },
+  uCloudAmt: { value: 1 },
+  uMapMix: { value: 0 },
+};
+const ATMOS = /* glsl */`
+uniform vec3 uSunDir;
+uniform vec3 uBetaR;
+uniform float uBetaM, uHR, uHM, uSunI;
+float chapman(float X, float h, float c) {
+  float s = sqrt(X + h);
+  if (c >= 0.0) return s / (s * c + 1.0) * exp(-h);
+  float x0 = sqrt(max(1.0 - c * c, 0.0)) * (X + h);
+  return 2.0 * sqrt(x0) * exp(min(X - x0, 60.0)) - s / (1.0 - s * c) * exp(-h);
+}
+vec2 sunOD(float r, float mu) {
+  float h = max(r - 1.0, 0.0);
+  return vec2(uHR * chapman(1.0 / uHR, h / uHR, mu), uHM * chapman(1.0 / uHM, h / uHM, mu));
+}
+vec3 sunTrans(float r, float mu) {
+  vec2 od = sunOD(r, mu);
+  return exp(-(uBetaR * od.x + uBetaM * 1.11 * od.y));
+}
+`;
+
+/* ---------------- textures ---------------- */
+function solid(r, g, b) {
+  const t = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1);
+  t.needsUpdate = true; return t;
+}
+const T = {
+  day: solid(18, 38, 80), land: solid(246, 245, 244), night: solid(0, 0, 0), clouds: solid(0, 0, 0), water: solid(255, 255, 255), detail: solid(128, 128, 128),
+};
+T.day.colorSpace = THREE.SRGBColorSpace; T.land.colorSpace = THREE.SRGBColorSpace;
+
+/* ---------------- earth ---------------- */
+const earthMat = new THREE.ShaderMaterial({
+  uniforms: Object.assign({}, U, {
+    tDay: { value: T.day }, tNight: { value: T.night }, tClouds: { value: T.clouds }, tWater: { value: T.water }, tDetail: { value: T.detail },
+    uDetailAmt: { value: 0 }, uNightGain: { value: 1.4 }, uGround: { value: 2.7 }, uSpec: { value: 0.06 },
+    tLand: { value: T.land }, tMap: { value: T.land }, uMapWin: { value: new THREE.Vector4(0, 0, 1, 1) }, uMapReady: { value: 0 }, uMapMix: U.uMapMix,
+  }),
+  vertexShader: /* glsl */`
+    varying vec2 vUv; varying vec3 vPos;
+    void main() { vUv = uv; vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDay, tNight, tClouds, tWater, tDetail, tLand, tMap;
+    uniform vec3 uCamPos;
+    uniform vec4 uMapWin;
+    uniform float uCloudShift, uCloudAmt, uDetailAmt, uNightGain, uGround, uSpec, uMapReady, uMapMix;
+    // the post pass tone-maps everything; this undoes it so map colours come out exactly as designed
+    vec3 invAces(vec3 y) {
+      y = clamp(y, 0.0, 0.985);
+      vec3 a = 2.51 - 2.43 * y, b = 0.03 - 0.59 * y, c = -0.14 * y;
+      return (-b + sqrt(b * b - 4.0 * a * c)) / (2.0 * a);
+    }
+    varying vec2 vUv; varying vec3 vPos;
+    ${ATMOS}
+    void main() {
+      vec3 N = normalize(vPos);
+      vec3 V = normalize(uCamPos - vPos);
+      vec3 L = uSunDir;
+      float NdL = dot(N, L);
+
+      vec3 day = texture2D(tDay, vUv).rgb;
+      float w = smoothstep(0.25, 0.75, texture2D(tWater, vUv).r);
+      float rel = 1.0 + (texture2D(tDetail, vUv).r - 0.502) * 1.99;
+      day *= mix(1.0, rel, uDetailAmt * (1.0 - w));
+
+      // colour grade toward the Google Earth look: richer land, deep blue ocean with visible shelves
+      float lum = dot(day, vec3(0.2126, 0.7152, 0.0722));
+      vec3 land = max(mix(vec3(lum), day, 1.18), 0.0) * 1.06;
+      float olum = dot(day, vec3(0.2126, 0.7152, 0.0722));
+      vec3 ocean = mix(vec3(olum), day, 0.9) * vec3(0.56, 0.7, 0.96) / (1.0 + olum * 2.2) + vec3(0.0, 0.002, 0.009);
+      vec3 albedo = mix(land, ocean, w);
+
+      // cloud shadows, cast along the sun direction
+      vec3 E = normalize(vec3(N.z, 0.0, -N.x) + vec3(0.0, 0.0, 1e-5));
+      vec3 Nn = cross(N, E);
+      vec3 st = L - N * NdL;
+      float cosLat = max(length(N.xz), 0.06);
+      vec2 shUv = vec2(dot(st, E) / (cosLat * 6.2831853), dot(st, Nn) / 3.1415927) * 0.005 / max(NdL, 0.3);
+      vec2 cUv = vUv + vec2(uCloudShift, 0.0);
+      float cShadow = smoothstep(0.03, 1.0, texture2D(tClouds, cUv + shUv).r) * uCloudAmt;
+      float cHere = smoothstep(0.03, 1.0, texture2D(tClouds, cUv).r) * uCloudAmt;
+
+      vec3 sunL = sunTrans(1.0, NdL);
+      float diff = max(NdL, 0.0);
+      vec3 col = albedo * sunL * diff * (1.0 - 0.55 * cShadow) * uGround;
+      // skylight
+      col += albedo * vec3(0.040, 0.055, 0.085) * smoothstep(-0.15, 0.5, NdL) * uGround;
+
+      // sun glint on water (GGX)
+      vec3 H = normalize(L + V);
+      float NdV = max(dot(N, V), 1e-3), NdH = max(dot(N, H), 0.0), VdH = max(dot(V, H), 0.0);
+      float a = 0.09, a2 = a * a;
+      float dd = NdH * NdH * (a2 - 1.0) + 1.0;
+      float D = a2 / (3.14159 * dd * dd);
+      float k = a * 0.5;
+      float G = (diff / (diff * (1.0 - k) + k)) * (NdV / (NdV * (1.0 - k) + k));
+      float F = 0.02 + 0.98 * pow(1.0 - VdH, 5.0);
+      float spec = D * G * F / max(4.0 * NdV, 1e-3);
+      col += w * sunL * spec * uSpec * (1.0 - 0.8 * cShadow);
+
+      // city lights on the night side
+      vec3 lights = texture2D(tNight, vUv).rgb + texture2D(tNight, vUv, 2.5).rgb * 0.6;
+      float night = smoothstep(0.06, -0.14, NdL);
+      col += pow(lights, vec3(1.25)) * night * uNightGain * (1.0 - 0.7 * cHere) * vec3(1.0, 0.88, 0.68);
+      col += albedo * vec3(0.012, 0.016, 0.03) * night;
+
+      // map style below ~500 km: flat Google-Maps colours from a high-resolution map drawn for the view
+      if (uMapMix > 0.001) {
+        float latD = degrees(asin(clamp(N.y, -1.0, 1.0)));
+        float lonD = degrees(atan(-N.z, N.x));
+        vec3 mc = mix(texture2D(tLand, vUv).rgb, vec3(0.3515, 0.6795, 0.8228), w);
+        float dl = mod(lonD - uMapWin.x + 540.0, 360.0) - 180.0;
+        vec2 m = vec2(dl / uMapWin.z + 0.5, (latD - uMapWin.y) / uMapWin.w);
+        vec3 tex = texture2D(tMap, clamp(m, 0.0, 1.0)).rgb;
+        float e = uMapReady * smoothstep(0.0, 0.02, min(min(m.x, 1.0 - m.x), min(m.y, 1.0 - m.y)));
+        mc = mix(mc, tex, e);
+        col = mix(col, invAces(mc), uMapMix);
+      }
+
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+});
+const earth = new THREE.Mesh(new THREE.SphereGeometry(1, coarse ? 256 : 384, coarse ? 128 : 192), earthMat);
+earth.renderOrder = 0;
+scene.add(earth);
+
+/* ---------------- clouds ---------------- */
+const cloudMat = new THREE.ShaderMaterial({
+  uniforms: Object.assign({}, U, { tClouds: { value: T.clouds }, uCloudGain: { value: 2.3 } }),
+  vertexShader: /* glsl */`
+    varying vec2 vUv; varying vec3 vPos;
+    void main() { vUv = uv; vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tClouds; uniform float uCloudShift, uCloudAmt, uCloudGain; uniform vec3 uCamPos;
+    varying vec2 vUv; varying vec3 vPos;
+    ${ATMOS}
+    void main() {
+      float c = texture2D(tClouds, vUv + vec2(uCloudShift, 0.0)).r;
+      float a = smoothstep(0.03, 1.0, c) * uCloudAmt * 0.9;
+      if (a < 0.004) discard;
+      vec3 N = normalize(vPos);
+      float NdL = dot(N, uSunDir);
+      vec3 Ts = sunTrans(length(vPos), NdL);
+      float lit = clamp(NdL * 0.9 + 0.1, 0.0, 1.0) * smoothstep(-0.14, 0.04, NdL);
+      vec3 col = Ts * lit * uCloudGain + vec3(0.002, 0.003, 0.005);
+      gl_FragColor = vec4(col * a, a);
+    }`,
+  transparent: true, depthWrite: false,
+  blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+});
+const cloudMesh = new THREE.Mesh(new THREE.SphereGeometry(1.0045, 256, 128), cloudMat);
+cloudMesh.renderOrder = 1;
+scene.add(cloudMesh);
+
+/* ---------------- atmosphere (single scattering, ray-marched) ---------------- */
+const ATM_TOP = 1.045;
+const atmoMat = new THREE.ShaderMaterial({
+  uniforms: Object.assign({}, U, { uGroundHaze: { value: 0.32 } }),
+  defines: { STEPS: coarse ? 12 : 18 },
+  vertexShader: /* glsl */`
+    varying vec3 vWorld;
+    void main() { vWorld = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform vec3 uCamPos;
+    uniform float uGroundHaze, uMapMix;
+    varying vec3 vWorld;
+    ${ATMOS}
+    vec2 rsi(vec3 ro, vec3 rd, float r) {
+      float b = dot(ro, rd), c = dot(ro, ro) - r * r, d = b * b - c;
+      if (d < 0.0) return vec2(1e9, -1e9);
+      d = sqrt(d); return vec2(-b - d, -b + d);
+    }
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main() {
+      vec3 rd = normalize(vWorld - uCamPos);
+      vec2 ta = rsi(uCamPos, rd, ${ATM_TOP.toFixed(4)});
+      if (ta.x > ta.y || ta.y < 0.0) discard;
+      float t0 = max(ta.x, 0.0), t1 = ta.y;
+      vec2 tg = rsi(uCamPos, rd, 1.0);
+      bool hit = tg.x < tg.y && tg.x > 0.0;
+      if (hit) t1 = tg.x;
+      float ds = (t1 - t0) / float(STEPS);
+      float jitter = 0.5 + (hash(gl_FragCoord.xy) - 0.5) * 0.3;
+      vec3 sumR = vec3(0.0), sumM = vec3(0.0);
+      float odR = 0.0, odM = 0.0;
+      for (int i = 0; i < STEPS; i++) {
+        vec3 p = uCamPos + rd * (t0 + (float(i) + jitter) * ds);
+        float r = length(p);
+        float h = max(r - 1.0, 0.0);
+        float dR = exp(-h / uHR) * ds, dM = exp(-h / uHM) * ds;
+        odR += dR * 0.5; odM += dM * 0.5;
+        vec2 ls = sunOD(r, dot(p, uSunDir) / r);
+        vec3 tr = exp(-(uBetaR * (odR + ls.x) + uBetaM * 1.11 * (odM + ls.y)));
+        sumR += tr * dR; sumM += tr * dM;
+        odR += dR * 0.5; odM += dM * 0.5;
+      }
+      float mu = dot(rd, uSunDir);
+      float pR = 0.0596831 * (1.0 + mu * mu);
+      const float g = 0.76;
+      float pM = 0.1193662 * ((1.0 - g * g) * (1.0 + mu * mu)) / ((2.0 + g * g) * pow(1.0 + g * g - 2.0 * g * mu, 1.5));
+      vec3 Ls = uSunI * (sumR * uBetaR * pR + sumM * uBetaM * pM);
+      vec3 Tv = exp(-(uBetaR * odR + uBetaM * 1.11 * odM));
+      float alpha = 0.0;
+      if (hit) {
+        // looking down at the ground: keep the haze light so the imagery stays crisp, full strength toward the limb
+        vec3 g = normalize(uCamPos + rd * t1);
+        float mu0 = clamp(-dot(rd, g), 0.0, 1.0);
+        Ls *= mix(1.0, uGroundHaze, smoothstep(0.0, 0.32, mu0)) * (1.0 - uMapMix);
+        alpha = (1.0 - dot(Tv, vec3(0.3333))) * (1.0 - uMapMix);
+      }
+      gl_FragColor = vec4(Ls, alpha);
+    }`,
+  side: THREE.BackSide, transparent: true, depthTest: false, depthWrite: false,
+  blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+});
+const atmo = new THREE.Mesh(new THREE.SphereGeometry(ATM_TOP, 128, 64), atmoMat);
+atmo.renderOrder = 2;
+scene.add(atmo);
+
+/* ---------------- stars + faint Milky Way ---------------- */
+(function buildSky() {
+  const N = coarse ? 6000 : 9000;
+  const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), size = new Float32Array(N);
+  const gN = new V3(-0.48, 0.86, 0.17).normalize();
+  const gA = new V3(1, 0, 0).cross(gN).normalize(), gB = new V3().crossVectors(gN, gA);
+  const temps = [[0.66, 0.76, 1.0], [0.82, 0.88, 1.0], [1.0, 1.0, 1.0], [1.0, 0.94, 0.82], [1.0, 0.82, 0.62]];
+  const v = new V3();
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < N; i++) {
+    if (rnd() < 0.38) {
+      const ang = rnd() * Math.PI * 2;
+      const lat = (rnd() + rnd() + rnd() - 1.5) * 0.22;
+      v.copy(gA).multiplyScalar(Math.cos(ang) * Math.cos(lat)).addScaledVector(gB, Math.sin(ang) * Math.cos(lat)).addScaledVector(gN, Math.sin(lat));
+    } else {
+      const z = rnd() * 2 - 1, t = rnd() * Math.PI * 2, s = Math.sqrt(1 - z * z);
+      v.set(s * Math.cos(t), z, s * Math.sin(t));
+    }
+    v.multiplyScalar(900).toArray(pos, i * 3);
+    const m = Math.log10(1 + rnd() * (Math.pow(10, 0.5 * 6.8) - 1)) / 0.5;
+    const flux = Math.pow(10, -0.4 * (m - 1.2));
+    const tc = temps[Math.min(4, Math.floor(rnd() * rnd() * 5 + (rnd() < 0.15 ? 2 : 0)))];
+    const b = Math.min(2.4, flux * 0.9 + 0.05);
+    col[i * 3] = tc[0] * b; col[i * 3 + 1] = tc[1] * b; col[i * 3 + 2] = tc[2] * b;
+    size[i] = 1.1 + Math.min(2.2, Math.sqrt(flux) * 1.1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uDPR: { value: DPR } },
+    vertexShader: /* glsl */`
+      attribute vec3 aColor; attribute float aSize; uniform float uDPR; varying vec3 vC;
+      void main() { vC = aColor; gl_PointSize = aSize * uDPR; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`
+      varying vec3 vC;
+      void main() { float d = length(gl_PointCoord - 0.5) * 2.0; float a = smoothstep(1.0, 0.0, d); a *= a; gl_FragColor = vec4(vC * a, 1.0); }`,
+    transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  skyScene.add(new THREE.Points(g, mat));
+
+  const band = new THREE.Mesh(new THREE.SphereGeometry(1200, 64, 32), new THREE.ShaderMaterial({
+    uniforms: { uN: { value: gN } },
+    vertexShader: /* glsl */`varying vec3 vD; void main() { vD = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uN; varying vec3 vD;
+      float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      float n3(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+                   mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+      void main() {
+        vec3 d = normalize(vD);
+        float lat = dot(d, uN);
+        float n = n3(d * 5.0) * 0.55 + n3(d * 11.0) * 0.3 + n3(d * 23.0) * 0.15;
+        float b = exp(-lat * lat / 0.018) * (0.35 + 0.9 * n);
+        float dust = smoothstep(0.55, 0.75, n3(d * 9.0 + 3.0)) * exp(-lat * lat / 0.002);
+        b *= 1.0 - 0.6 * dust;
+        gl_FragColor = vec4(vec3(0.58, 0.64, 0.8) * b * 0.022, 1.0);
+      }`,
+    side: THREE.BackSide, depthTest: false, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending,
+  }));
+  band.renderOrder = -1;
+  skyScene.add(band);
+})();
+
+/* ---------------- borders (screen-space thick lines) ---------------- */
+const lineMat = (opts) => new THREE.ShaderMaterial({
+  uniforms: {
+    uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: opts.width }, uColor: { value: new THREE.Color(...opts.color) },
+    uOpacity: { value: opts.opacity }, uDash: { value: 0 }, uCamPos: U.uCamPos, uSunDir: U.uSunDir, uVis: { value: 1 },
+  },
+  vertexShader: /* glsl */`
+    attribute vec3 aA, aB; attribute float aSide, aEnd, aDist;
+    uniform vec2 uRes; uniform float uWidth; uniform vec3 uCamPos, uSunDir;
+    varying float vDist, vFade;
+    void main() {
+      vec4 ca = projectionMatrix * viewMatrix * vec4(aA, 1.0);
+      vec4 cb = projectionMatrix * viewMatrix * vec4(aB, 1.0);
+      vec3 P = mix(aA, aB, aEnd);
+      vec3 Np = normalize(P);
+      vFade = smoothstep(0.0, 0.2, dot(Np, normalize(uCamPos - P))) * mix(0.16, 1.0, smoothstep(-0.3, 0.1, dot(Np, uSunDir)));
+      vDist = aDist;
+      if (ca.w <= 1e-4 || cb.w <= 1e-4) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+      vec4 c = mix(ca, cb, aEnd);
+      vec2 d = (cb.xy / cb.w - ca.xy / ca.w) * uRes;
+      float len = length(d);
+      vec2 dir = len > 1e-6 ? d / len : vec2(1.0, 0.0);
+      vec2 n = vec2(-dir.y, dir.x);
+      c.xy += (n * aSide + dir * (aEnd * 2.0 - 1.0) * 0.5) * uWidth / uRes * c.w;
+      gl_Position = c;
+    }`,
+  fragmentShader: /* glsl */`
+    uniform vec3 uColor; uniform float uOpacity, uDash, uVis;
+    varying float vDist, vFade;
+    void main() {
+      if (uDash > 0.0 && fract(vDist * uDash) > 0.58) discard;
+      float a = uOpacity * vFade * uVis;
+      if (a < 0.003) discard;
+      gl_FragColor = vec4(uColor * a, a);
+    }`,
+  transparent: true, depthTest: true, depthWrite: false, side: THREE.DoubleSide,
+  blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+});
+const countryMat = lineMat({ width: 1.3 * DPR, color: [1.5, 1.5, 1.5], opacity: 0.7 });
+const stateMat = lineMat({ width: 1.0 * DPR, color: [1.35, 1.35, 1.35], opacity: 0.42 });
+let countryLines = null, stateLines = null;
+
+function buildLines(polys, radius, mat) {
+  const pts = [];
+  let segs = 0;
+  for (const poly of polys) {
+    const out = [];
+    for (let i = 0; i < poly.length; i += 2) {
+      const lon = poly[i], lat = poly[i + 1];
+      if (out.length) {
+        const p = out[out.length - 1];
+        const n = Math.ceil(Math.max(Math.abs(lon - p[0]), Math.abs(lat - p[1])) / 0.6);
+        for (let k = 1; k < n; k++) out.push([lerp(p[0], lon, k / n), lerp(p[1], lat, k / n)]);
+      }
+      out.push([lon, lat]);
+    }
+    if (out.length > 1) { pts.push(out); segs += out.length - 1; }
+  }
+  const A = new Float32Array(segs * 12), B = new Float32Array(segs * 12);
+  const side = new Float32Array(segs * 4), end = new Float32Array(segs * 4), dist = new Float32Array(segs * 4);
+  const idx = new Uint32Array(segs * 6);
+  const a = new V3(), b = new V3();
+  let s = 0;
+  for (const line of pts) {
+    let acc = 0;
+    llv(line[0][1], line[0][0], radius, a);
+    for (let i = 1; i < line.length; i++) {
+      llv(line[i][1], line[i][0], radius, b);
+      const len = a.distanceTo(b);
+      for (let k = 0; k < 4; k++) {
+        const o = (s * 4 + k);
+        a.toArray(A, o * 3); b.toArray(B, o * 3);
+        side[o] = (k & 1) ? 1 : -1; end[o] = k < 2 ? 0 : 1; dist[o] = k < 2 ? acc : acc + len;
+      }
+      const v = s * 4, j = s * 6;
+      idx[j] = v; idx[j + 1] = v + 1; idx[j + 2] = v + 2; idx[j + 3] = v + 2; idx[j + 4] = v + 1; idx[j + 5] = v + 3;
+      acc += len; a.copy(b); s++;
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(A, 3));
+  g.setAttribute('aA', new THREE.BufferAttribute(A, 3));
+  g.setAttribute('aB', new THREE.BufferAttribute(B, 3));
+  g.setAttribute('aSide', new THREE.BufferAttribute(side, 1));
+  g.setAttribute('aEnd', new THREE.BufferAttribute(end, 1));
+  g.setAttribute('aDist', new THREE.BufferAttribute(dist, 1));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  const m = new THREE.Mesh(g, mat);
+  m.frustumCulled = false;
+  return m;
+}
+
+/* ---------------- tone mapping pass ---------------- */
+const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: { tScene: { value: rt.texture }, uExposure: { value: 1.0 }, uSharp: { value: 0 }, uTexel: { value: new THREE.Vector2(1, 1) } },
+  vertexShader: /* glsl */`varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tScene; uniform float uExposure, uSharp; uniform vec2 uTexel; varying vec2 vUv;
+    vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+    vec3 toSRGB(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+    void main() {
+      vec3 c = texture2D(tScene, vUv).rgb;
+      if (uSharp > 0.0) { // Memoir: unsharp mask for the close porthole view, where the imagery is magnified
+        vec3 b = texture2D(tScene, vUv + vec2(uTexel.x, 0.0)).rgb + texture2D(tScene, vUv - vec2(uTexel.x, 0.0)).rgb
+               + texture2D(tScene, vUv + vec2(0.0, uTexel.y)).rgb + texture2D(tScene, vUv - vec2(0.0, uTexel.y)).rgb;
+        c = max(c + uSharp * (c - b * 0.25), 0.0);
+      }
+      c = toSRGB(aces(c * uExposure));
+      float n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+      gl_FragColor = vec4(c + n / 255.0, 1.0);
+    }`,
+  depthTest: false, depthWrite: false,
+}));
+post.frustumCulled = false;
+postScene.add(post);
+
+/* ---------------- camera model (Google Earth style: target, range, heading, tilt) ---------------- */
+const HOME = { lat: 12, lon: 108 }; // Memoir opens over Asia–Pacific
+const view = { lat: HOME.lat, lon: HOME.lon, range: 2.3, heading: 0, tilt: 0 };
+const goal = { range: view.range };
+const vel = { lat: 0, lon: 0 };
+let anim = null;       // heading/tilt easing
+let flight = null;     // fly-to
+let zoomAnchor = null; // keeps the point under the cursor fixed while zooming
+const MIN_RANGE = 0.0045, MAX_RANGE = 9;
+const tmpA = new V3(), tmpB = new V3(), tmpC = new V3();
+const east = new V3(), north = new V3(), fh = new V3();
+
+const tiltMax = (r) => clamp(78 - 22 * r, 0, 72);
+
+function updateCamera() {
+  view.tilt = clamp(view.tilt, 0, tiltMax(view.range));
+  const p = llv(view.lat, view.lon, 1, tmpA);
+  const lo = view.lon * DEG;
+  east.set(-Math.sin(lo), 0, -Math.cos(lo));
+  north.crossVectors(p, east);
+  const h = view.heading * DEG, t = view.tilt * DEG;
+  fh.copy(north).multiplyScalar(Math.cos(h)).addScaledVector(east, Math.sin(h));
+  tmpB.copy(p).multiplyScalar(Math.cos(t)).addScaledVector(fh, -Math.sin(t));
+  camera.position.copy(p).addScaledVector(tmpB, view.range);
+  camera.up.copy(fh).multiplyScalar(Math.cos(t)).addScaledVector(p, Math.sin(t));
+  camera.lookAt(p);
+  const alt = camera.position.length() - 1;
+  camera.near = clamp(alt * 0.25, 0.0004, 0.5);
+  camera.far = camera.position.length() + 2.5;
+  // Memoir: the target sits off-centre (lifted above the fun fact, slid beside a side panel) at every
+  // zoom; the street map gets the same offset as MapLibre padding (syncStreetPadding) so they line up.
+  // On the sign-in screen (introMix 1) the offset puts the globe in the porthole window instead.
+  if (camera.view) {
+    let ox = -homeShift.x, oy = homeLift;
+    if (introMix > 0) { ox = lerp(ox, W / 2 - intro.cx, introMix); oy = lerp(oy, H / 2 - intro.cy, introMix); }
+    camera.view.offsetX = ox;
+    camera.view.offsetY = oy;
+  }
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  skyCam.quaternion.copy(camera.quaternion);
+  skyCam.updateMatrixWorld();
+  U.uCamPos.value.copy(camera.position);
+}
+
+const ray = new THREE.Ray(), ndc = new V3();
+function pick(x, y) {
+  ndc.set((x / W) * 2 - 1, -(y / H) * 2 + 1, 0.5).unproject(camera);
+  ray.origin.copy(camera.position);
+  ray.direction.copy(ndc).sub(camera.position).normalize();
+  const b = ray.origin.dot(ray.direction), c = ray.origin.lengthSq() - 1, d = b * b - c;
+  if (d < 0) return null;
+  const t = -b - Math.sqrt(d);
+  if (t < 0) return null;
+  return vll(tmpC.copy(ray.direction).multiplyScalar(t).add(ray.origin));
+}
+
+/* ---------------- sizing ---------------- */
+let W = 1, H = 1;
+const labelCanvas = $('#labels');
+const lctx = labelCanvas.getContext('2d');
+function fitRange() {
+  const halfV = (camera.fov / 2) * DEG;
+  const halfH = Math.atan(Math.tan(halfV) * camera.aspect);
+  const half = Math.min(halfV, halfH);
+  const ang = Math.atan(Math.tan(half) * (camera.aspect >= 1 ? 1.03 : 0.94));
+  return 1 / Math.sin(ang) - 1;
+}
+// Memoir's resting layout. The app reports where the free space above its fun fact ends
+// (stage.bottom, px). The globe rests just above that line at about half the screen height
+// (most of the width on phones), lifted off-centre with a view offset. Zooming in eases it
+// back to the middle of the screen, so the street-map handoff is unaffected.
+// stage.left (px) is covered by a side panel; the globe centres in the space to its right,
+// sliding over smoothly (homeShift eases toward its target each frame).
+const stage = { bottom: null, left: 0 };
+let homeR = 5, homeLift = 0;
+const homeShift = { x: 0, target: 0 };
+// Memoir's sign-in screen shows the globe through a porthole window: big and low in it, centred at
+// (cx, cy) px with a radius of r px, looking down at lat/lon. introMix blends the view offset between
+// that framing (1) and the home layout (0); see setIntro in the Memoir bridge.
+const intro = { on: false, cx: 0, cy: 0, r: 300, lat: 0, lon: 0 };
+let introMix = 0, introTween = null;
+function homeLayout() {
+  const top = Math.max(80, H * 0.1);
+  const bottom = stage.bottom === null ? H * 0.76 : clamp(stage.bottom, top + 120, H);
+  const left = clamp(stage.left, 0, W * 0.7);
+  const dia = Math.max(120, Math.min(H * 0.52, (W - left) * 0.84, bottom - top));
+  return { dia, lift: H / 2 - (bottom - dia / 2), shift: left / 2 };
+}
+function homeRange() {
+  const tanV = Math.tan((camera.fov / 2) * DEG);
+  return clamp(1 / Math.sin(Math.atan((homeLayout().dia / H) * tanV)) - 1, 1, MAX_RANGE);
+}
+function relayout() {
+  const wasHome = !intro.on && !flight && Math.abs(Math.log(goal.range / homeR)) < 0.03;
+  const lay = homeLayout();
+  homeR = homeRange(); homeLift = lay.lift; homeShift.target = lay.shift;
+  if (!started) homeShift.x = homeShift.target;
+  if (wasHome) { goal.range = homeR; if (!started) view.range = homeR; }
+}
+function resize() {
+  W = Math.max(1, window.innerWidth); H = Math.max(1, window.innerHeight);
+  renderer.setSize(W, H, false);
+  rt.setSize(Math.round(W * DPR), Math.round(H * DPR));
+  post.material.uniforms.uTexel.value.set(1 / rt.width, 1 / rt.height);
+  camera.aspect = W / H; skyCam.aspect = W / H;
+  camera.setViewOffset(W, H, 0, 0, W, H); // offsetY is set per frame in updateCamera
+  camera.updateProjectionMatrix(); skyCam.updateProjectionMatrix();
+  labelCanvas.width = Math.round(W * DPR); labelCanvas.height = Math.round(H * DPR);
+  for (const m of [countryMat, stateMat]) m.uniforms.uRes.value.set(W * DPR, H * DPR);
+  labelsDirty = true;
+  relayout();
+}
+
+/* ---------------- sun ---------------- */
+const light = { mode: 'studio', offsetH: 0 };
+function subsolar(date) {
+  const d = date.getTime() / 86400000 + 2440587.5 - 2451545.0;
+  const g = (357.529 + 0.98560028 * d) * DEG;
+  const q = 280.459 + 0.98564736 * d;
+  const L = (q + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * DEG;
+  const e = (23.439 - 0.00000036 * d) * DEG;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)) / DEG;
+  const dec = Math.asin(Math.sin(e) * Math.sin(L)) / DEG;
+  const gmst = (18.697374558 + 24.06570982441908 * d) % 24;
+  return { lat: dec, lon: wrap(ra - gmst * 15) };
+}
+const camRight = new V3(), camUp = new V3(), camBack = new V3();
+function updateSun() {
+  const s = U.uSunDir.value;
+  if (light.mode === 'live') {
+    const ss = subsolar(new Date(Date.now() + light.offsetH * 3600e3));
+    llv(ss.lat, ss.lon, 1, s);
+  } else {
+    camera.matrixWorld.extractBasis(camRight, camUp, camBack);
+    // Memoir: light from the upper left so the lower-right limb falls into shadow, as in the design
+    s.set(0, 0, 0).addScaledVector(camRight, -0.55).addScaledVector(camUp, 0.38).addScaledVector(camBack, 0.74).normalize();
+  }
+}
+
+/* ---------------- labels ---------------- */
+const labels = [];
+let labelsOn = true, labelsDirty = true, fontsReady = false;
+const placesIndex = [];
+const OCEANS = [
+  ['North Atlantic Ocean', -40, 33, 3.6], ['South Atlantic Ocean', -15, -27, 3.6], ['North Pacific Ocean', -150, 28, 3.4],
+  ['South Pacific Ocean', -125, -32, 3.4], ['Indian Ocean', 78, -22, 3.4], ['Arctic Ocean', 10, 84, 3.8], ['Southern Ocean', 60, -62, 3.8],
+  ['Caribbean Sea', -75, 14.5, 4.8], ['Gulf of Mexico', -90, 25, 4.8], ['Mediterranean Sea', 18, 34.5, 4.8], ['Philippine Sea', 133, 18, 4.8],
+  ['South China Sea', 114, 13, 4.8], ['Arabian Sea', 64, 15, 4.8], ['Bay of Bengal', 89, 15, 4.8], ['Coral Sea', 155, -17, 4.8],
+  ['Tasman Sea', 161, -39, 4.8], ['Sea of Japan', 135, 40.5, 5.2], ['Bering Sea', -178, 58, 4.8], ['Hudson Bay', -85, 60, 5.0],
+  ['Red Sea', 38.5, 20.5, 5.4], ['Black Sea', 34, 43.3, 5.2], ['Caspian Sea', 50.7, 41.8, 5.4], ['Gulf of Alaska', -145, 56, 5.2],
+  ['Barents Sea', 40, 73, 5.0], ['Norwegian Sea', 2, 68, 5.2], ['East China Sea', 126, 29, 5.2], ['Arafura Sea', 135, -9.5, 5.4],
+  ['Gulf of Guinea', 3, 1.5, 5.2], ['Labrador Sea', -55, 58, 5.2], ['Sea of Okhotsk', 150, 54, 5.2], ['Weddell Sea', -45, -72, 5.2],
+  ['Java Sea', 111, -5, 5.6], ['Celebes Sea', 122, 4, 5.8], ['Sulu Sea', 120.5, 8.5, 6.0], ['North Sea', 3, 56, 5.6], ['Baltic Sea', 19.5, 57.5, 5.6],
+];
+const FONT = (w, s, italic) => `${italic ? 'italic ' : ''}${w} ${s}px Figtree, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+
+function addLabel(o) {
+  o.pos = llv(o.lat, o.lon, 1.0);
+  o.alpha = 0; o.w = 0; o.sx = 0; o.sy = 0; o.vis = 0;
+  o.font = FONT(o.weight, o.size, o.italic);
+  labels.push(o);
+}
+const hasLS = 'letterSpacing' in CanvasRenderingContext2D.prototype;
+let lastMapMode = false;
+function measureLabels() {
+  for (const L of labels) {
+    lctx.font = L.font;
+    if (hasLS) lctx.letterSpacing = L.ls || '0px';
+    L.w = lctx.measureText(L.text).width;
+  }
+  if (hasLS) lctx.letterSpacing = '0px';
+}
+function setupPlaces(P) {
+  for (const [name, lon, lat, rank, minLabel, pop, type, ext] of P.countries) {
+    if (name === 'Antarctica') { addLabel({ kind: 'country', text: name, lat: -80, lon: 20, minZ: 1.5, group: 0, pri: 2, size: 15, weight: 700, color: '#ffffff' }); }
+    else addLabel({ kind: 'country', text: name, lat, lon, group: 0,
+      minZ: Math.max(minLabel - (/Sovereign|Country/.test(type) ? 2.5 : 1.2), Math.log2(14 / Math.max(ext, 0.01))), pri: rank - Math.log10(pop + 10) * 0.05,
+      size: rank <= 3 ? 15 : rank <= 5 ? 14 : 13, weight: 700, color: '#ffffff', mapColor: '#5f6368', maxZ: 8.2 });
+    placesIndex.push({ name, sub: type === 'Dependency' ? 'Territory' : 'Country', lat, lon, range: clamp(ext * DEG * 2.3, 0.18, 2.6), pri: rank });
+  }
+  for (const [label, name, lon, lat, minLabel, admin, ext] of P.states) {
+    const abbr = label !== name;
+    addLabel({ kind: 'state', text: label, lat, lon, minZ: abbr ? minLabel - 1.6 : minLabel - 0.6, group: 2, pri: minLabel, globeOnly: true,
+      size: abbr ? 12 : 12, weight: 600, color: 'rgba(255,255,255,0.92)' });
+    placesIndex.push({ name, sub: (admin === 'United States of America' ? 'State · United States' : 'Region · ' + admin), lat, lon,
+      range: clamp(ext * DEG * 2.5, 0.09, 1.4), pri: 4 + minLabel * 0.1 });
+  }
+  for (const [name, lon, lat, minZoom, pop, cap, country] of P.cities) {
+    addLabel({ kind: 'city', text: name, lat, lon, minZ: Math.max(4.7, minZoom + 0.6), group: cap ? 1 : 3, globeOnly: true, pri: minZoom - Math.log10(pop + 10) * 0.1,
+      size: cap ? 12.5 : 12, weight: cap ? 700 : 600, color: '#ffffff', cap });
+    placesIndex.push({ name, sub: (cap ? 'Capital · ' : 'City · ') + country, lat, lon, range: 0.04, pri: 6 + minZoom * 0.1 - Math.log10(pop + 10) * 0.2 });
+  }
+  for (const [name, lon, lat, minZ] of OCEANS) {
+    addLabel({ kind: 'water', text: name, lat, lon, minZ, maxZ: minZ < 4 ? 6.2 : 8.5, group: 2, pri: minZ, size: minZ < 4 ? 13.5 : 12.5, weight: 500, italic: true, color: 'rgba(196,220,255,0.86)', mapColor: '#4a7eae' });
+    placesIndex.push({ name, sub: 'Ocean · sea', lat, lon, range: minZ < 4 ? 1.4 : 0.6, pri: 5 });
+  }
+  sortLabels();
+}
+function sortLabels() {
+  labels.sort((a, b) => a.group - b.group || a.pri - b.pri);
+  measureLabels();
+  labelsDirty = true;
+}
+
+function zoomLevel() {
+  const mpp = (view.range * EARTH_KM * 1000 * 2 * Math.tan((camera.fov / 2) * DEG)) / H;
+  return Math.log2(156543 / mpp);
+}
+
+const grid = new Map();
+const GRID = 80;
+function collides(x0, y0, x1, y1) {
+  const gx0 = Math.floor(x0 / GRID), gx1 = Math.floor(x1 / GRID), gy0 = Math.floor(y0 / GRID), gy1 = Math.floor(y1 / GRID);
+  for (let gx = gx0; gx <= gx1; gx++) for (let gy = gy0; gy <= gy1; gy++) {
+    const cell = grid.get(gx * 4096 + gy);
+    if (!cell) continue;
+    for (let i = 0; i < cell.length; i += 4) {
+      if (x0 < cell[i + 2] && x1 > cell[i] && y0 < cell[i + 3] && y1 > cell[i + 1]) return true;
+    }
+  }
+  return false;
+}
+function occupy(x0, y0, x1, y1) {
+  const gx0 = Math.floor(x0 / GRID), gx1 = Math.floor(x1 / GRID), gy0 = Math.floor(y0 / GRID), gy1 = Math.floor(y1 / GRID);
+  for (let gx = gx0; gx <= gx1; gx++) for (let gy = gy0; gy <= gy1; gy++) {
+    const k = gx * 4096 + gy;
+    let cell = grid.get(k); if (!cell) { cell = []; grid.set(k, cell); }
+    cell.push(x0, y0, x1, y1);
+  }
+}
+
+const proj = new V3();
+let lastLabelT = 0;
+const uiBlockers = ['.search-box', '#results', '.labels-toggle', '.controls', '#panel', '.attrib', '.readout'].map((s) => document.querySelector(s));
+function drawLabels(now) {
+  const dt = Math.min(100, now - lastLabelT); lastLabelT = now;
+  const ctx = lctx;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (!fontsReady) return true;
+  const z = zoomLevel();
+  grid.clear();
+  for (const el of uiBlockers) {
+    if (!el || el.hidden) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width && r.height) occupy(r.left - 4, r.top - 4, r.right + 4, r.bottom + 4);
+  }
+  const cam = camera.position;
+  const mapMode = MAP.mix > 0.5;
+  if (mapMode !== lastMapMode) { lastMapMode = mapMode; for (const L of labels) if (L.alpha > 0 && (mapMode ? L.globeOnly : L.mapOnly)) L.alpha = 0; }
+  const k = 1 - Math.exp(-dt / 110);
+  let animating = false;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  for (const L of labels) {
+    let target = 0;
+    const want = labelsOn && z >= L.minZ && (L.maxZ === undefined || z <= L.maxZ) && !(mapMode ? L.globeOnly : L.mapOnly);
+    if (want || L.alpha > 0.004) {
+      tmpB.subVectors(cam, L.pos);
+      const facing = L.pos.dot(tmpB) / tmpB.length();
+      L.vis = smooth(0.03, 0.22, facing);
+      if (facing > 0.03) {
+        proj.copy(L.pos).project(camera);
+        L.sx = (proj.x + 1) * 0.5 * W; L.sy = (1 - proj.y) * 0.5 * H;
+        if (want && proj.z < 1 && L.sx > -50 && L.sx < W + 50 && L.sy > -20 && L.sy < H + 20) {
+          const pad = L.kind === 'state' || L.kind === 'region' ? 3 : 5;
+          const hh = L.size * 0.62 + pad;
+          let x0, x1;
+          if (L.kind === 'city' && !mapMode) { x0 = L.sx - 5 - pad; x1 = L.sx + 8 + L.w + pad; }
+          else { x0 = L.sx - L.w / 2 - pad; x1 = L.sx + L.w / 2 + pad; }
+          const y0 = L.sy - hh, y1 = L.sy + hh;
+          if (!collides(x0, y0, x1, y1)) { occupy(x0, y0, x1, y1); target = 1; }
+        }
+      }
+    }
+    const before = L.alpha;
+    L.alpha += (target - L.alpha) * k;
+    if (Math.abs(target - L.alpha) < 0.004) L.alpha = target;
+    if (L.alpha !== before) animating = true;
+    const a = L.alpha * L.vis;
+    if (a < 0.01) continue;
+    ctx.globalAlpha = a;
+    ctx.font = L.font;
+    if (hasLS) ctx.letterSpacing = L.ls || '0px';
+    let tx = L.sx;
+    if (mapMode) {
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = 'rgba(255,255,255,0.92)'; ctx.lineWidth = 3.4;
+      ctx.strokeText(L.text, tx, L.sy);
+      ctx.fillStyle = L.mapColor || '#3c4043';
+      ctx.fillText(L.text, tx, L.sy);
+      continue;
+    }
+    if (L.kind === 'city') {
+      ctx.textAlign = 'left';
+      ctx.beginPath(); ctx.arc(L.sx, L.sy, L.cap ? 3.4 : 2.7, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(L.sx, L.sy, L.cap ? 2.3 : 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff'; ctx.fill();
+      tx = L.sx + 7;
+    } else ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.65)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 0.5;
+    ctx.strokeStyle = 'rgba(0,0,0,0.42)'; ctx.lineWidth = 2.6;
+    ctx.strokeText(L.text, tx, L.sy);
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    ctx.fillStyle = L.color;
+    ctx.fillText(L.text, tx, L.sy);
+  }
+  ctx.globalAlpha = 1;
+  if (hasLS) ctx.letterSpacing = '0px';
+  return animating;
+}
+
+/* ---------------- map mode: below ~500 km the globe turns into a clean street-map style ---------------- */
+const MAP_ON_KM = 500, MAP_OFF_KM = 540; // switch to the map below 500 km, back to satellite above 540 km
+const MAP = {
+  mix: 0, on: false, wantSince: 0, loading: false, index: null, tiles: new Map(), img: null, win: null, cur: 0, lastDraw: -1e9, dirty: false,
+  size: Math.min(caps.maxTextureSize, coarse ? 2048 : DPR >= 1.5 ? 4096 : 3072),
+};
+MAP.bufs = [0, 1].map(() => {
+  const c = document.createElement('canvas'); c.width = c.height = MAP.size;
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = maxAniso;
+  t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+  return { c, t };
+});
+const MC = {
+  water: '#a0d7ea', land: '#f6f5f4', urban: '#eeedea', adm0: '#8e8a9b', adm1: '#9da1a8', adm2: '#b0b4ba', adm3: '#c4c7cc',
+  park: '#d6f3de', forest: '#c8ecd3', hospital: '#fbe4e2', campus: '#ecebe8',
+  hwy: '#8592b3', hwyCase: '#7684a6', sec: '#aab3c8', minor: '#ffffff', minorCase: '#d4d8df',
+};
+function ensureMapData() {
+  if (MAP.loading) return;
+  MAP.loading = true;
+  fetch('tiles/index.json').then((r) => r.json()).then((list) => { MAP.index = new Set(list); MAP.dirty = true; }).catch(() => {});
+  const img = new Image();
+  img.onload = () => { MAP.img = img; MAP.dirty = true; };
+  img.src = 'tex/landfill.png';
+  loadTex('tex/landfill.png', true, false, true).then((t) => { t.wrapS = THREE.RepeatWrapping; earthMat.uniforms.tLand.value = t; }).catch(() => {});
+  fetch('places10.json').then((r) => r.json()).then(setupMapPlaces).catch(() => {});
+}
+function parseTile(name, json) {
+  const us = name.indexOf('_');
+  const ox = +name.slice(1, us) * 15 - 180, oy = +name.slice(us + 1) * 15 - 90;
+  const dec = (d) => {
+    const a = new Float32Array(d.length); let x = 0, y = 0;
+    for (let i = 0; i < d.length; i += 2) { x += d[i]; y += d[i + 1]; a[i] = ox + x / 1e4; a[i + 1] = oy + y / 1e4; }
+    return a;
+  };
+  const box = (arrs) => {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const a of arrs) for (let i = 0; i < a.length; i += 2) {
+      if (a[i] < x0) x0 = a[i]; if (a[i] > x1) x1 = a[i]; if (a[i + 1] < y0) y0 = a[i + 1]; if (a[i + 1] > y1) y1 = a[i + 1];
+    }
+    return [x0, y0, x1, y1];
+  };
+  const t = { cx: ox + 7.5 };
+  for (const k of ['l', 'k', 'u']) t[k] = (json[k] || []).map((rings) => { const rs = rings.map(dec); return { rs, bb: box(rs) }; });
+  for (const k of ['v', 'r', 'p']) t[k] = (json[k] || []).map(([c, d]) => { const a = dec(d); return { c, a, bb: box([a]) }; });
+  t.b = (json.b || []).map((d) => { const a = dec(d); return { a, bb: box([a]) }; });
+  // optional OpenStreetMap detail for covered areas: green spaces, hospitals, campuses, water, roads, waterways
+  for (const k of ['G', 'F', 'H', 'S', 'W']) t[k] = (json[k] || []).map((rings) => { const rs = rings.map(dec); return { rs, bb: box(rs) }; });
+  for (const k of ['R', 'w']) t[k] = (json[k] || []).map(([c, d]) => { const a = dec(d); return { c, a, bb: box([a]) }; });
+  t.cov = json.cov || null;
+  return t;
+}
+function getTile(name) {
+  if (!MAP.index || !MAP.index.has(name)) return null;
+  const have = MAP.tiles.get(name);
+  if (have) return have === 'loading' ? null : have;
+  MAP.tiles.set(name, 'loading');
+  fetch('tiles/' + name + '.json').then((r) => r.json()).then((j) => { MAP.tiles.set(name, parseTile(name, j)); MAP.dirty = true; })
+    .catch(() => MAP.tiles.delete(name));
+  return null;
+}
+const mapGrid = [];
+for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) mapGrid.push([i / 4, j / 4]);
+function pxPerDeg() { return (H * DPR) / ((view.range * 2 * Math.tan((camera.fov / 2) * DEG)) / DEG); }
+function updateMap(now) {
+  if (!MAP.index) return;
+  // how much of the ground is on screen?
+  const latC = view.lat, lonC = view.lon;
+  let hl = 0, hn = 0, miss = false;
+  for (const [u, v] of mapGrid) {
+    const ll = pick(u * W, v * H);
+    if (!ll) { miss = true; continue; }
+    hl = Math.max(hl, Math.abs(ll.lat - latC)); hn = Math.max(hn, Math.abs(wrap(ll.lon - lonC)));
+  }
+  const cosl = Math.max(0.12, Math.cos(latC * DEG));
+  const capLat = 6, capLon = Math.min(45, 6 / cosl);
+  if (miss) { hl *= 1.25; hn *= 1.25; } // horizon in view: the far ground beyond the window uses the coarse fallback
+  hl = Math.min(Math.max(hl, 0.02), capLat); hn = Math.min(Math.max(hn, 0.02 / cosl), capLon);
+  const ppd = pxPerDeg();
+  const w = MAP.win;
+  let need = !w || MAP.dirty;
+  if (w) {
+    const inside = latC - hl >= w.lat0 && latC + hl <= w.lat0 + w.latSpan &&
+      Math.abs(wrap(lonC - w.lonC)) + hn <= w.lonSpan / 2;
+    const r = (MAP.size / w.latSpan) / ppd;
+    if (!inside || (r < 0.95 && hl * 1.25 < w.latSpan * 0.42) || (r > 2.6 && w.latSpan > hl * 3.2)) need = true;
+  }
+  if (!need || now - MAP.lastDraw < (w ? 160 : 0)) {
+    fetchTilesFor(latC, lonC, hl * 1.5, hn * 1.5);
+    return;
+  }
+  // choose a window with a margin for panning, but never blurrier than the screen needs
+  const sharpHalf = MAP.size / (1.15 * ppd) / 2;
+  const hLat = clamp(Math.max(hl * 1.25, Math.min(sharpHalf, capLat)), hl, capLat);
+  const hLon = clamp(Math.max(hn * 1.25, Math.min(sharpHalf / cosl, capLon)), hn, capLon);
+  const lat0 = Math.max(-90, latC - hLat), lat1 = Math.min(90, latC + hLat);
+  const win = { lonC, lonSpan: hLon * 2, lat0, latSpan: lat1 - lat0, ppd };
+  MAP.dirty = false;
+  MAP.lastDraw = now;
+  const buf = MAP.bufs[MAP.cur ^ 1];
+  if (!drawMap(win, buf)) return;
+  MAP.cur ^= 1; MAP.win = win;
+  buf.t.needsUpdate = true;
+  const u = earthMat.uniforms;
+  u.tMap.value = buf.t; u.uMapWin.value.set(win.lonC, win.lat0, win.lonSpan, win.latSpan); u.uMapReady.value = 1;
+}
+function tilesFor(latC, lonC, hLat, hLon) {
+  const out = [];
+  const y0 = clamp(Math.floor((latC - hLat + 90) / 15), 0, 11), y1 = clamp(Math.floor((latC + hLat + 90) / 15), 0, 11);
+  const x0 = Math.floor((lonC - hLon + 180) / 15), x1 = Math.floor((lonC + hLon + 180) / 15);
+  for (let x = x0; x <= Math.min(x1, x0 + 23); x++) for (let y = y0; y <= y1; y++) out.push('t' + (((x % 24) + 24) % 24) + '_' + y);
+  return out;
+}
+function fetchTilesFor(latC, lonC, hLat, hLon) { for (const n of tilesFor(latC, lonC, hLat, hLon)) getTile(n); }
+function drawMap(win, buf) {
+  const names = tilesFor(win.lat0 + win.latSpan / 2, win.lonC, win.latSpan / 2, win.lonSpan / 2);
+  const tiles = names.map(getTile).filter(Boolean);
+  if (names.some((n) => MAP.tiles.get(n) === 'loading')) return false; // wait for the tile rather than flash empty water
+  const S = MAP.size, ctx = buf.c.getContext('2d');
+  const sx = S / win.lonSpan, sy = S / win.latSpan;
+  const lonL = win.lonC - win.lonSpan / 2, lonR = win.lonC + win.lonSpan / 2, latT = win.lat0 + win.latSpan, latB = win.lat0;
+  const k = (sy / win.ppd + sx / (win.ppd * Math.max(0.12, Math.cos((win.lat0 + win.latSpan / 2) * DEG)))) / 2; // texels per screen device pixel
+  const z = zoomLevel(), zf = clamp((z - 7.5) / 3.5, 0, 1);
+  const px = (cssPx) => Math.max(0.6, cssPx * DPR * k);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = MC.water; ctx.fillRect(0, 0, S, S);
+  const vis = (bb, sh) => bb[2] + sh >= lonL && bb[0] + sh <= lonR && bb[3] >= latB && bb[1] <= latT;
+  const covs = tiles.filter((t) => t.cov).map((t) => t.cov);
+  const covered = (bb) => covs.some((c) => bb[0] >= c[0] && bb[2] <= c[2] && bb[1] >= c[1] && bb[3] <= c[3]);
+  const path = (a, sh, close) => {
+    ctx.moveTo((a[0] + sh - lonL) * sx, (latT - a[1]) * sy);
+    for (let i = 2; i < a.length; i += 2) ctx.lineTo((a[i] + sh - lonL) * sx, (latT - a[i + 1]) * sy);
+    if (close) ctx.closePath();
+  };
+  const shiftOf = (t) => Math.round((win.lonC - t.cx) / 360) * 360;
+  const fillLayer = (key, color, rule) => {
+    ctx.beginPath();
+    for (const t of tiles) { const sh = shiftOf(t); for (const f of t[key]) if (vis(f.bb, sh)) for (const r of f.rs) path(r, sh, true); }
+    ctx.fillStyle = color; ctx.fill(rule || 'evenodd');
+  };
+  const strokeLayer = (key, filter, color, width, dash) => {
+    ctx.beginPath();
+    let any = false;
+    for (const t of tiles) { const sh = shiftOf(t); for (const f of t[key]) if ((!filter || filter(f)) && vis(f.bb, sh)) { path(f.a, sh, false); any = true; } }
+    if (!any) return;
+    ctx.setLineDash(dash || []); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+  };
+  // land, with soft greenery and desert tones from the landcover image
+  fillLayer('l', MC.land, 'nonzero'); // OSM land: outer rings counter-clockwise, holes clockwise
+  const coarseA = 1 - smooth(10.0, 11.0, z); // landcover tint and urban shading are regional-scale data: fade them out up close
+  if (MAP.img && coarseA > 0.01) {
+    ctx.save(); ctx.clip('nonzero'); ctx.globalAlpha = coarseA;
+    const IW = MAP.img.width, IH = MAP.img.height;
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    for (const off of [-360, 0, 360]) {
+      const a = Math.max(lonL, -180 + off), b = Math.min(lonR, 180 + off);
+      if (b <= a) continue;
+      const srcX = (a - off + 180) / 360 * IW, srcW = (b - a) / 360 * IW;
+      const srcY = (90 - latT) / 180 * IH, srcH = win.latSpan / 180 * IH;
+      ctx.drawImage(MAP.img, srcX, srcY, Math.max(srcW, 0.01), Math.max(srcH, 0.01), (a - lonL) * sx, 0, (b - a) * sx, S);
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = coarseA;
+  if (coarseA > 0.01) fillLayer('u', MC.urban);
+  ctx.globalAlpha = 1;
+  fillLayer('F', MC.forest);
+  fillLayer('G', MC.park);
+  fillLayer('S', MC.campus);
+  fillLayer('H', MC.hospital);
+  fillLayer('k', MC.water);
+  fillLayer('W', MC.water);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  strokeLayer('v', (f) => f.c === 1 && !covered(f.bb), MC.water, px(1.6 + 1.4 * zf));
+  strokeLayer('v', (f) => f.c === 2 && !covered(f.bb), MC.water, px(0.9 + 0.8 * zf));
+  strokeLayer('w', (f) => f.c === 1, MC.water, px(1.4 + 1.8 * zf));
+  if (z > 10) strokeLayer('w', (f) => f.c === 2, MC.water, px(0.8 + 0.6 * zf));
+  if (z > 10.2) strokeLayer('p', (f) => f.c === 3, MC.adm3, px(0.9), [px(1.6), px(2.6)]);
+  if (z > 7.6) strokeLayer('p', (f) => f.c === 2, MC.adm2, px(1.0), [px(4), px(3)]);
+  strokeLayer('p', (f) => f.c === 1, MC.adm1, px(1.2), [px(5), px(3.5)]);
+  strokeLayer('b', null, MC.adm0, px(1.4));
+  ctx.setLineDash([]);
+  const ne = (c) => (f) => f.c === c && !covered(f.bb);
+  if (z > 8.2) {
+    strokeLayer('r', ne(3), MC.minorCase, px(1.9 + 1.2 * zf));
+    strokeLayer('r', ne(3), MC.minor, px(1.1 + 1.0 * zf));
+  }
+  // "unknown" Natural Earth roads link major highway segments: light at regional zoom, highway style close up
+  const unk = z > 9.6;
+  strokeLayer('r', ne(2), MC.sec, px(1.1 + 1.1 * zf));
+  if (!unk) strokeLayer('r', ne(4), MC.sec, px(1.0 + 0.8 * zf));
+  const major = (f) => (f.c === 1 || (unk && f.c === 4)) && !covered(f.bb);
+  strokeLayer('r', major, MC.hwyCase, px(1.7 + 2.0 * zf));
+  strokeLayer('r', major, MC.hwy, px(1.2 + 1.7 * zf));
+  // OpenStreetMap roads: 1 motorway/trunk, 2 primary, 3 secondary, 4 tertiary
+  const zr = clamp((z - 9) / 4, 0, 1);
+  if (z > 10.4) { strokeLayer('R', (f) => f.c === 4, MC.minorCase, px(1.6 + 2.2 * zr)); strokeLayer('R', (f) => f.c === 4, MC.minor, px(0.9 + 1.6 * zr)); }
+  if (z > 9.4) { strokeLayer('R', (f) => f.c === 3, MC.minorCase, px(2.0 + 2.6 * zr)); strokeLayer('R', (f) => f.c === 3, MC.minor, px(1.2 + 2.0 * zr)); }
+  strokeLayer('R', (f) => f.c === 2, MC.hwyCase, px(1.9 + 2.6 * zr)); strokeLayer('R', (f) => f.c === 2, MC.sec, px(1.3 + 2.0 * zr));
+  strokeLayer('R', (f) => f.c === 1, MC.hwyCase, px(2.4 + 3.0 * zr)); strokeLayer('R', (f) => f.c === 1, MC.hwy, px(1.7 + 2.4 * zr));
+  return true;
+}
+function setupMapPlaces(D) {
+  const strip = (n) => norm(n).replace(/ city$/, '');
+  const near = new Map();
+  for (const [name, lon, lat, minZoom, pop, cap, country] of D.places) {
+    const big = pop >= 5e6 ? 17 : pop >= 1e6 ? 15.5 : pop >= 3e5 ? 14 : pop >= 1e5 ? 13 : 12.5;
+    addLabel({ kind: 'place', text: name, lat, lon, minZ: Math.max(6.8, minZoom - 0.4), group: 1, pri: minZoom - Math.log10(pop + 10) * 0.25 - cap,
+      size: big + (cap ? 1 : 0), weight: big >= 14 ? 700 : 600, color: '#ffffff', mapColor: '#202124', mapOnly: true });
+    near.set(strip(name), [lat, lon]);
+    if (!placesIndex.some((p) => p.name === name && Math.abs(p.lat - lat) < 0.3 && Math.abs(wrap(p.lon - lon)) < 0.3))
+      placesIndex.push({ name, sub: (cap ? 'Capital · ' : 'City · ') + country, lat, lon, range: 0.04, pri: 7 + minZoom * 0.1 - Math.log10(pop + 10) * 0.2 });
+  }
+  for (const [name, lon, lat, rank, admin] of D.regions) {
+    const key = strip(name), hit = near.get(key);
+    if (hit && Math.abs(hit[0] - lat) < 0.2 && Math.abs(wrap(hit[1] - lon)) < 0.2) continue;
+    const isCity = / City$/.test(name);
+    if (isCity) addLabel({ kind: 'place', text: name, lat, lon, minZ: 8.6, group: 2, pri: rank, size: 13.5, weight: 700, color: '#ffffff', mapColor: '#202124', mapOnly: true });
+    else addLabel({ kind: 'region', text: name.toUpperCase(), lat, lon, minZ: 6.4 + rank * 0.25, group: 2, pri: rank + 1, size: 11.5, weight: 600,
+      color: '#ffffff', mapColor: '#70757a', ls: '1.2px', mapOnly: true });
+    placesIndex.push({ name, sub: (isCity ? 'City · ' : 'Province · ') + admin, lat, lon, range: isCity ? 0.03 : 0.07, pri: 8 + rank * 0.1 });
+  }
+  sortLabels();
+}
+
+/* ---------------- street map: OpenFreeMap vector tiles take over below 500 km ----------------
+   Where the page can reach tiles.openfreemap.org (any normal web host), a MapLibre GL map with
+   OpenStreetMap data is lined up exactly with the globe camera and faded in below 500 km.
+   Where it cannot (sandboxed previews), the bundled map mode above is used instead. */
+const OFM_BASE = 'https://tiles.openfreemap.org';
+const OFM_TILEJSON = OFM_BASE + '/planet';
+const MAPLIBRE_URL = 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js';
+const STREET_ON_KM = 500, STREET_OFF_KM = 560;
+const STREET = {
+  state: 'checking', map: null, loading: false, ready: false, active: false, pending: false, pendingSince: 0,
+  opacity: 0, target: 0, syncing: false, prog: false, tiles: null, attribution: '', symbols: [], cursor: '', lastPush: 0,
+  el: $('#map'),
+};
+const srcEl = $('#src');
+const SRC_GLOBE = srcEl.innerHTML;
+const SRC_STREET = 'Map: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · ' +
+  '<a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a> · Data ' +
+  '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>';
+function loadScript(url) {
+  return new Promise((res, rej) => {
+    const el = document.createElement('script');
+    el.src = url; el.async = true; el.onload = res; el.onerror = rej;
+    document.head.appendChild(el);
+  });
+}
+(function probeStreetTiles(tries) {
+  // a blocked host fails at once; a slow network gets a second, longer chance before falling back
+  const ctl = 'AbortController' in window ? new AbortController() : null;
+  const timer = setTimeout(() => ctl && ctl.abort(), tries ? 15000 : 8000);
+  fetch(OFM_TILEJSON, ctl ? { signal: ctl.signal } : undefined)
+    .then((r) => { clearTimeout(timer); if (!r.ok) throw new Error('tilejson ' + r.status); return r.json(); })
+    .then((tj) => {
+      if (!tj.tiles || !tj.tiles.length) throw new Error('tilejson');
+      STREET.tiles = tj;
+      return window.maplibregl ? null : loadScript(MAPLIBRE_URL);
+    })
+    .then(() => { if (!window.maplibregl) throw new Error('maplibre'); STREET.state = 'ok'; })
+    .catch((e) => {
+      clearTimeout(timer);
+      if (e && e.name === 'AbortError' && !tries) probeStreetTiles(1);
+      else STREET.state = 'off';
+    });
+})(0);
+const MERC_TILE = 512, EARTH_M = EARTH_KM * 1000;
+function zoomForRange(range, lat) {
+  const mpp = (range * EARTH_M * 2 * Math.tan((camera.fov / 2) * DEG)) / H;
+  return Math.log2((2 * Math.PI * EARTH_M * Math.max(0.01, Math.cos(lat * DEG))) / (MERC_TILE * mpp));
+}
+function rangeForZoom(z, lat) {
+  const mpp = (2 * Math.PI * EARTH_M * Math.max(0.01, Math.cos(lat * DEG))) / (MERC_TILE * Math.pow(2, z));
+  return (mpp * H) / (2 * Math.tan((camera.fov / 2) * DEG)) / EARTH_M;
+}
+function absTileUrl(u) {
+  if (/^https?:/i.test(u)) return u;
+  return new URL(u, new URL(OFM_TILEJSON, location.href)).href.replace(/%7B/gi, '{').replace(/%7D/gi, '}');
+}
+function createStreetMap() {
+  STREET.loading = true;
+  fetch('mapstyle.json').then((r) => { if (!r.ok) throw new Error('style'); return r.text(); }).then((txt) => {
+    const style = JSON.parse(txt.split('__OFM__').join(OFM_BASE));
+    const tj = STREET.tiles;
+    style.sources.openmaptiles = {
+      type: 'vector', tiles: tj.tiles.map(absTileUrl), minzoom: tj.minzoom || 0, maxzoom: tj.maxzoom || 14,
+      attribution: tj.attribution || '',
+    };
+    const m = new maplibregl.Map({
+      container: STREET.el, style,
+      center: [wrap(view.lon), clamp(view.lat, -85, 85)], zoom: zoomForRange(view.range, view.lat),
+      bearing: view.heading, pitch: Math.min(view.tilt, 75),
+      attributionControl: false, keyboard: false, maxPitch: 75, minZoom: 1, maxZoom: 19.5,
+      fadeDuration: 160, cancelPendingTileRequestsWhileZooming: false,
+    });
+    m.setVerticalFieldOfView(camera.fov);
+    STREET.map = m;
+    syncStreetPadding();
+    m.on('load', () => {
+      STREET.ready = true;
+      STREET.symbols = m.getStyle().layers.filter((l) => l.type === 'symbol').map((l) => l.id);
+      if (!labelsOn) setStreetLabels(false);
+    });
+    m.on('move', onStreetMove);
+    m.on('moveend', () => {
+      if (!STREET.active) return;
+      STREET.prog = false;
+      onStreetMove();
+    });
+    m.on('mousemove', (e) => { STREET.cursor = fmtLL(e.lngLat.lat, wrap(e.lngLat.lng), true); });
+    m.on('mouseout', () => { STREET.cursor = ''; });
+    m.on('dragstart', hideHint);
+    m.on('error', () => {}); // missing tiles or icons are not fatal
+  }).catch((e) => { console.warn('Street map unavailable, using the built-in map:', e); STREET.state = 'off'; STREET.loading = false; });
+}
+let streetPad = '';
+function syncStreetPadding() {
+  const m = STREET.map; if (!m) return;
+  const x = Math.round(homeShift.x * 2), y = Math.round(homeLift * 2);
+  const key = x + ',' + y;
+  if (key === streetPad) return;
+  streetPad = key;
+  STREET.syncing = true; // keep the globe camera where it is; only the map's frame moves
+  m.setPadding({ left: Math.max(0, x), right: Math.max(0, -x), bottom: Math.max(0, y), top: Math.max(0, -y) });
+  STREET.syncing = false;
+}
+function setStreetLabels(on) {
+  const m = STREET.map; if (!m || !STREET.ready) return;
+  for (const id of STREET.symbols) if (m.getLayer(id)) m.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+}
+function pushViewToStreet() {
+  const m = STREET.map;
+  STREET.syncing = true;
+  m.jumpTo({ center: [wrap(view.lon), clamp(view.lat, -85, 85)], zoom: zoomForRange(view.range, view.lat), bearing: view.heading, pitch: Math.min(view.tilt, 75) });
+  STREET.syncing = false;
+}
+function onStreetMove() {
+  if (!STREET.active || STREET.syncing) return;
+  const m = STREET.map, c = m.getCenter();
+  view.lat = clamp(c.lat, -89, 89); view.lon = wrap(c.lng); view.heading = m.getBearing(); view.tilt = m.getPitch();
+  view.range = goal.range = clamp(rangeForZoom(m.getZoom(), c.lat), 1e-6, MAX_RANGE);
+  updateCamera();
+  const alt = (camera.position.length() - 1) * EARTH_KM;
+  if (!STREET.prog && alt > STREET_OFF_KM) exitStreet(true);
+}
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+function activateStreet(now) {
+  const m = STREET.map;
+  STREET.active = true; STREET.pending = false; STREET.target = 1;
+  STREET.el.classList.add('on'); document.body.classList.add('street'); srcEl.innerHTML = SRC_STREET;
+  // carry on whatever motion the globe was in the middle of
+  if (flight) {
+    const k = clamp((now - flight.start) / flight.dur, 0, 1);
+    const end = vll(flight.b);
+    STREET.prog = true;
+    m.easeTo({ center: [wrap(end.lon), end.lat], zoom: zoomForRange(flight.r1, end.lat), bearing: flight.h1, pitch: Math.min(flight.t1, 75),
+      duration: reduceMotion ? 0 : Math.max(350, flight.dur * (1 - k)), easing: easeOutCubic });
+  } else if (goal.range < view.range * 0.97) {
+    const around = zoomAnchor ? [wrap(zoomAnchor.ll.lon), zoomAnchor.ll.lat] : undefined;
+    m.easeTo({ zoom: zoomForRange(goal.range, view.lat), around, duration: reduceMotion ? 0 : 320, easing: easeOutCubic });
+  }
+  stopMotion();
+  for (const id of pointers.keys()) { try { canvas.releasePointerCapture(id); } catch (_) {} }
+  pointers.clear(); drag = null; canvas.classList.remove('dragging');
+  labelsDirty = true;
+}
+function exitStreet(carryZoomOut) {
+  const m = STREET.map;
+  STREET.active = false; STREET.prog = false; STREET.target = 0;
+  STREET.el.classList.remove('on'); document.body.classList.remove('street'); srcEl.innerHTML = SRC_GLOBE;
+  if (m.isMoving()) m.stop();
+  goal.range = carryZoomOut ? view.range * 1.3 : view.range;
+  labelsDirty = true;
+}
+function streetFlyTo(lat, lon, range, o) {
+  const m = STREET.map;
+  STREET.prog = true;
+  m.flyTo({ center: [wrap(lon), lat], zoom: zoomForRange(range, lat), bearing: o.heading || 0, pitch: Math.min(o.tilt || 0, 75),
+    essential: true, duration: reduceMotion ? 0 : undefined });
+}
+function updateStreet(now, dt, altKm) {
+  const m = STREET.map;
+  if (STREET.state === 'ok' && !m && !STREET.loading && altKm < 2500) createStreetMap();
+  if (m && STREET.ready && !STREET.active) {
+    const headingUp = flight && flight.r1 * EARTH_KM > STREET_ON_KM; // a flight that ends high stays on the globe
+    if (altKm < STREET_ON_KM && !headingUp) {
+      if (!STREET.pending) { STREET.pending = true; STREET.pendingSince = now; }
+      pushViewToStreet();
+      if (m.areTilesLoaded() || now - STREET.pendingSince > 1400) activateStreet(now);
+    } else {
+      STREET.pending = false;
+      // warm up the tiles for the area the camera is descending toward
+      if (altKm < 1100 && now - STREET.lastPush > 250) { STREET.lastPush = now; pushViewToStreet(); }
+    }
+  }
+  const k = 1 - Math.exp(-dt / (reduceMotion ? 1 : 110));
+  STREET.opacity += (STREET.target - STREET.opacity) * k;
+  if (Math.abs(STREET.target - STREET.opacity) < 0.003) STREET.opacity = STREET.target;
+  STREET.el.style.opacity = STREET.opacity.toFixed(3);
+  STREET.el.style.visibility = STREET.opacity > 0 ? 'visible' : 'hidden';
+  labelCanvas.style.opacity = (1 - STREET.opacity).toFixed(3);
+}
+
+/* ---------------- data loading ---------------- */
+const loader = new THREE.TextureLoader();
+const total = 6; let done = 0;
+function tick() { done++; loadBar.style.width = Math.round((done / total) * 100) + '%'; }
+function loadTex(url, srgb, red, quiet) {
+  return new Promise((res, rej) => loader.load(url, (t) => {
+    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    if (red && caps.isWebGL2) t.format = THREE.RedFormat;
+    t.anisotropy = maxAniso;
+    t.wrapS = THREE.RepeatWrapping;
+    t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+    t.needsUpdate = true;
+    if (!quiet) tick(); res(t);
+  }, undefined, () => rej(new Error(url))));
+}
+function decodeLines(list, scale) {
+  return list.map((d) => {
+    const line = new Float32Array(d.length);
+    let lon = 0, lat = 0;
+    for (let k = 0; k < d.length; k += 2) { lon += d[k]; lat += d[k + 1]; line[k] = lon / scale; line[k + 1] = lat / scale; }
+    return line;
+  });
+}
+
+let started = false;
+const dayP = loadTex('tex/day.jpg', true, false).then((t) => { earthMat.uniforms.tDay.value = t; });
+const waterP = loadTex('tex/water.png', false, true).then((t) => { earthMat.uniforms.tWater.value = t; });
+const cloudP = loadTex('tex/clouds.jpg', false, true).then((t) => { earthMat.uniforms.tClouds.value = t; cloudMat.uniforms.tClouds.value = t; });
+const nightP = loadTex('tex/night.jpg', true, false).then((t) => { earthMat.uniforms.tNight.value = t; });
+const placesP = fetch('places.json').then((r) => { if (!r.ok) throw new Error('places'); return r.json(); }).then((P) => { tick(); setupPlaces(P); });
+const bordersP = fetch('borders.json').then((r) => { if (!r.ok) throw new Error('borders'); return r.json(); }).then((b) => {
+  tick();
+  const c0 = decodeLines(b.countries, b.scale), c1 = decodeLines(b.states, b.scale);
+  countryLines = buildLines(c0, 1.0008, countryMat); countryLines.renderOrder = 4; scene.add(countryLines);
+  stateLines = buildLines(c1, 1.0007, stateMat); stateLines.renderOrder = 3; scene.add(stateLines);
+});
+Promise.all([dayP, waterP]).then(() => {
+  started = true;
+  setTimeout(() => $('#loading').classList.add('done'), 150);
+  setTimeout(() => { $('#loading').hidden = true; }, 1200);
+  // a sharper relief layer for close-ups, only where the GPU has room for it
+  if (caps.maxTextureSize >= 8192 && !coarse && (navigator.deviceMemory === undefined || navigator.deviceMemory >= 4)) {
+    loadTex('tex/detail.jpg', false, true).then((t) => { earthMat.uniforms.tDetail.value = t; hasDetail = true; }).catch(() => {});
+  }
+}).catch(() => fail('The Earth imagery did not load. Reload the page to try again.'));
+Promise.allSettled([cloudP, nightP, placesP, bordersP]);
+let hasDetail = false;
+
+if (document.fonts && document.fonts.load) {
+  Promise.all([document.fonts.load(FONT(700, 15)), document.fonts.load(FONT(600, 12)), document.fonts.load(FONT(500, 13, true))])
+    .catch(() => {}).then(() => { fontsReady = true; measureLabels(); labelsDirty = true; });
+  setTimeout(() => { if (!fontsReady) { fontsReady = true; measureLabels(); labelsDirty = true; } }, 2500);
+} else fontsReady = true;
+
+/* ---------------- interaction ---------------- */
+const pointers = new Map();
+let drag = null;
+let hintShown = true;
+if (coarse) $('#hint').textContent = 'Drag to rotate · Pinch to zoom · Twist to turn · Two-finger drag to tilt';
+function hideHint() { if (hintShown) { hintShown = false; $('#hint').classList.add('gone'); } }
+function stopMotion() { flight = null; anim = null; vel.lat = vel.lon = 0; zoomAnchor = null; goal.range = view.range; }
+
+function twoFinger() {
+  const [a, b] = [...pointers.values()];
+  return { cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, dist: Math.hypot(b.x - a.x, b.y - a.y), ang: Math.atan2(b.y - a.y, b.x - a.x) };
+}
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('pointerdown', (e) => {
+  canvas.focus({ preventScroll: true });
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  stopMotion(); hideHint(); closePanel(); closeResults();
+  const now = performance.now();
+  if (pointers.size === 1) {
+    const orbit = e.button === 2 || e.ctrlKey || e.shiftKey || e.metaKey || e.altKey;
+    drag = { mode: orbit ? 'orbit' : 'pan', x: e.clientX, y: e.clientY, grab: orbit ? null : pick(e.clientX, e.clientY), t: now, moved: now };
+  } else if (pointers.size === 2) {
+    drag = Object.assign({ mode: 'pinch' }, twoFinger());
+  }
+  canvas.classList.add('dragging');
+});
+function panTo(x, y, now) {
+  let dLat = 0, dLon = 0;
+  const cur = drag.grab ? pick(x, y) : null;
+  if (cur) {
+    dLat = clamp(drag.grab.lat - cur.lat, -20, 20);
+    dLon = clamp(wrap(drag.grab.lon - cur.lon), -30, 30);
+  } else {
+    const degPx = (view.range * camera.fov) / H * 0.9;
+    const dx = x - drag.x, dy = y - drag.y, h = view.heading * DEG;
+    dLon = (-dx * Math.cos(h) + dy * Math.sin(h)) * degPx / Math.max(0.2, Math.cos(view.lat * DEG));
+    dLat = (dx * Math.sin(h) + dy * Math.cos(h)) * degPx;
+    drag.grab = null;
+  }
+  drag.x = x; drag.y = y;
+  const newLat = clamp(view.lat + dLat, -89, 89);
+  dLat = newLat - view.lat;
+  view.lat = newLat; view.lon = wrap(view.lon + dLon);
+  const dt = Math.max(8, now - drag.t);
+  vel.lat = lerp(vel.lat, dLat / dt, 0.6); vel.lon = lerp(vel.lon, dLon / dt, 0.6);
+  drag.t = now; drag.moved = now;
+  updateCamera();
+}
+canvas.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId);
+  const now = performance.now();
+  if (!p) { hover = { x: e.clientX, y: e.clientY }; return; }
+  p.x = e.clientX; p.y = e.clientY;
+  if (!drag) return;
+  if (drag.mode === 'pan') panTo(e.clientX, e.clientY, now);
+  else if (drag.mode === 'orbit') {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    view.heading = wrap(view.heading - dx * 0.25);
+    view.tilt = clamp(view.tilt - dy * 0.22, 0, tiltMax(view.range));
+    drag.x = e.clientX; drag.y = e.clientY;
+    updateCamera();
+  } else if (drag.mode === 'pinch' && pointers.size >= 2) {
+    const f = twoFinger();
+    const s = drag.dist / Math.max(f.dist, 1);
+    view.range = goal.range = clamp(view.range * s, MIN_RANGE, MAX_RANGE);
+    view.heading = wrap(view.heading + (f.ang - drag.ang) / DEG);
+    if (Math.abs(f.dist - drag.dist) < 4) view.tilt = clamp(view.tilt - (f.cy - drag.cy) * 0.3, 0, tiltMax(view.range));
+    Object.assign(drag, f);
+    updateCamera();
+  }
+});
+function endPointer(e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  const now = performance.now();
+  if (pointers.size === 1) {
+    const [p] = [...pointers.values()];
+    drag = { mode: 'pan', x: p.x, y: p.y, grab: pick(p.x, p.y), t: now, moved: now };
+    vel.lat = vel.lon = 0;
+    return;
+  }
+  if (pointers.size === 0) {
+    if (!drag || drag.mode !== 'pan' || now - drag.moved > 70 || reduceMotion) { vel.lat = vel.lon = 0; }
+    drag = null;
+    canvas.classList.remove('dragging');
+  }
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('pointerleave', () => { if (!drag) { hover = null; $('#cursor').textContent = ''; } });
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  hideHint(); flight = null; vel.lat = vel.lon = 0;
+  let dy = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 600 : 1);
+  const k = e.ctrlKey ? 0.012 : 0.0017;
+  goal.range = clamp(goal.range * Math.exp(clamp(dy, -400, 400) * k), MIN_RANGE, MAX_RANGE);
+  const ll = pick(e.clientX, e.clientY);
+  zoomAnchor = ll ? { x: e.clientX, y: e.clientY, ll } : null;
+}, { passive: false });
+
+canvas.addEventListener('dblclick', (e) => {
+  const ll = pick(e.clientX, e.clientY);
+  if (!ll) return;
+  goal.range = clamp(goal.range * 0.45, MIN_RANGE, MAX_RANGE);
+  zoomAnchor = { x: e.clientX, y: e.clientY, ll };
+});
+
+let hover = null;
+window.addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' && (e.key === 'Enter' || e.key === ' '))) return;
+  const step = Math.min(20, view.range * 9);
+  let used = true;
+  switch (e.key) {
+    case 'ArrowLeft': flyBy(0, -step); break;
+    case 'ArrowRight': flyBy(0, step); break;
+    case 'ArrowUp': flyBy(step, 0); break;
+    case 'ArrowDown': flyBy(-step, 0); break;
+    case '+': case '=': zoomBy(0.6); break;
+    case '-': case '_': zoomBy(1.65); break;
+    case 'n': case 'N': resetNorth(); break;
+    case 'r': case 'R': if (STREET.active) exitStreet(false); flyTo(HOME.lat, HOME.lon, homeR, { heading: 0, tilt: 0 }); break;
+    // 'L' is left out: Memoir's details toggle owns label visibility
+    default: used = false;
+  }
+  if (used) { e.preventDefault(); hideHint(); }
+});
+function flyBy(dLat, dLon) {
+  if (STREET.active) { STREET.map.panBy([dLon > 0 ? 160 : dLon < 0 ? -160 : 0, dLat > 0 ? -160 : dLat < 0 ? 160 : 0], { duration: reduceMotion ? 0 : 300 }); return; }
+  const h = view.heading * DEG;
+  const n = dLat * Math.cos(h) - dLon * Math.sin(h), ea = dLat * Math.sin(h) + dLon * Math.cos(h);
+  flyTo(clamp(view.lat + n, -88, 88), view.lon + ea / Math.max(0.3, Math.cos(view.lat * DEG)), view.range, { dur: 450, keep: true });
+}
+function zoomBy(f) {
+  if (STREET.active) { const m = STREET.map; m.easeTo({ zoom: m.getZoom() - Math.log2(f), duration: reduceMotion ? 0 : 300 }); return; }
+  flight = null; zoomAnchor = null; goal.range = clamp(goal.range * f, MIN_RANGE, MAX_RANGE);
+}
+function resetNorth() {
+  if (STREET.active) { STREET.map.easeTo({ bearing: 0, duration: reduceMotion ? 0 : 500 }); return; }
+  flight = null; anim = { h0: view.heading, h1: 0, t0: view.tilt, t1: view.tilt, start: performance.now(), dur: reduceMotion ? 1 : 600 };
+}
+
+function flyTo(lat, lon, range, o = {}) {
+  if (STREET.active) {
+    const km = llv(view.lat, view.lon).angleTo(llv(lat, wrap(lon))) * EARTH_KM;
+    if (range * EARTH_KM < STREET_ON_KM && km < 450) { streetFlyTo(lat, lon, range, o); return; }
+    exitStreet(false); // long trips go up and over the globe, then land back in the street map
+  }
+  vel.lat = vel.lon = 0; zoomAnchor = null; anim = null;
+  if (range < 0.2 && STREET.state === 'off') { ensureMapData(); if (MAP.index) fetchTilesFor(lat, wrap(lon), 4, 4); }
+  const a = llv(view.lat, view.lon), b = llv(lat, wrap(lon));
+  const ang = a.angleTo(b);
+  const dur = reduceMotion ? 1 : (o.dur || clamp(900 + ang * 1100, 900, 3400));
+  const peak = o.keep ? 0 : Math.max(0, Math.min(ang * 1.6, 3.4) - Math.max(view.range, range));
+  flight = { start: performance.now(), dur, a, b, ang, r0: view.range, r1: clamp(range, MIN_RANGE, MAX_RANGE), peak,
+    h0: view.heading, h1: o.heading !== undefined ? o.heading : (o.keep ? view.heading : 0),
+    t0: view.tilt, t1: o.tilt !== undefined ? o.tilt : (o.keep ? view.tilt : 0) };
+}
+const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+function slerpDir(a, b, ang, t, out) {
+  if (ang < 1e-5) return out.copy(b);
+  const s = Math.sin(ang);
+  return out.copy(a).multiplyScalar(Math.sin((1 - t) * ang) / s).addScaledVector(b, Math.sin(t * ang) / s);
+}
+
+/* ---------------- UI wiring ---------------- */
+const labelsBox = $('#showLabels');
+function toggleLabels(on) { labelsOn = on; labelsBox.checked = on; labelsDirty = true; setStreetLabels(on); }
+labelsBox.addEventListener('change', () => toggleLabels(labelsBox.checked));
+$('#zin').addEventListener('click', () => zoomBy(0.55));
+$('#zout').addEventListener('click', () => zoomBy(1.8));
+$('#compass').addEventListener('click', resetNorth);
+const tiltBtn = $('#tiltBtn');
+tiltBtn.addEventListener('click', () => {
+  if (STREET.active) { const m = STREET.map; m.easeTo({ pitch: m.getPitch() > 2 ? 0 : 60, duration: reduceMotion ? 0 : 700 }); return; }
+  flight = null;
+  const target = view.tilt > 2 ? 0 : Math.max(tiltMax(view.range) * 0.85, 0);
+  if (target === 0 && view.tilt <= 2 && tiltMax(view.range) < 2) { zoomBy(0.35); }
+  anim = { h0: view.heading, h1: view.heading, t0: view.tilt, t1: target, start: performance.now(), dur: reduceMotion ? 1 : 700 };
+});
+
+const panel = $('#panel'), sunBtn = $('#sunBtn');
+function closePanel() { if (!panel.hidden) { panel.hidden = true; sunBtn.setAttribute('aria-expanded', 'false'); sunBtn.setAttribute('aria-pressed', 'false'); } }
+sunBtn.addEventListener('click', () => {
+  const open = panel.hidden;
+  panel.hidden = !open; sunBtn.setAttribute('aria-expanded', String(open)); sunBtn.setAttribute('aria-pressed', String(open));
+  if (open) closeResults();
+});
+const modeStudio = $('#modeStudio'), modeLive = $('#modeLive'), timeIn = $('#time'), timeOut = $('#timeOut'), nowBtn = $('#nowBtn'), subOut = $('#subsolar');
+function setMode(m) {
+  light.mode = m;
+  modeStudio.setAttribute('aria-pressed', String(m === 'studio'));
+  modeLive.setAttribute('aria-pressed', String(m === 'live'));
+  timeIn.disabled = m !== 'live';
+  nowBtn.disabled = m !== 'live' || light.offsetH === 0;
+  earthMat.uniforms.uSpec.value = m === 'live' ? 0.9 : 0.06;
+  earthMat.uniforms.uNightGain.value = m === 'live' ? 4.2 : 2.6;
+  updateTimeLabel();
+}
+function fmtLL(lat, lon, dp) {
+  const f = (v, p, n) => {
+    const a = Math.abs(v); const d = Math.floor(a); const m = Math.floor((a - d) * 60);
+    return dp ? `${d}°${String(m).padStart(2, '0')}′${v >= 0 ? p : n}` : `${d}°${v >= 0 ? p : n}`;
+  };
+  return `${f(lat, 'N', 'S')} ${f(lon, 'E', 'W')}`;
+}
+function updateTimeLabel() {
+  if (light.mode !== 'live') { timeOut.textContent = 'Not used'; subOut.textContent = ''; return; }
+  const d = new Date(Date.now() + light.offsetH * 3600e3);
+  timeOut.textContent = d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const ss = subsolar(d);
+  subOut.textContent = 'Sun overhead ' + fmtLL(ss.lat, ss.lon, false);
+}
+modeStudio.addEventListener('click', () => setMode('studio'));
+modeLive.addEventListener('click', () => setMode('live'));
+timeIn.addEventListener('input', () => { light.offsetH = parseFloat(timeIn.value); nowBtn.disabled = light.offsetH === 0; updateTimeLabel(); });
+nowBtn.addEventListener('click', () => { light.offsetH = 0; timeIn.value = 0; nowBtn.disabled = true; updateTimeLabel(); });
+$('#clouds').addEventListener('change', (e) => { cloudTarget = e.target.checked ? 1 : 0; });
+$('#borders').addEventListener('change', (e) => { borderTarget = e.target.checked ? 1 : 0; });
+let cloudTarget = 1, borderTarget = 1, borderVis = 1, cloudVis = 1;
+setMode('studio');
+
+/* search */
+const q = $('#q'), results = $('#results'), clearBtn = $('#clear');
+const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+let hits = [], sel = -1;
+function closeResults() { results.hidden = true; q.setAttribute('aria-expanded', 'false'); sel = -1; }
+function renderResults() {
+  results.innerHTML = '';
+  if (!hits.length) {
+    const li = document.createElement('li'); li.className = 'empty'; li.textContent = 'No matching place'; results.appendChild(li);
+  }
+  hits.forEach((h, i) => {
+    const li = document.createElement('li');
+    li.id = 'r' + i; li.setAttribute('role', 'option'); li.setAttribute('aria-selected', String(i === sel));
+    li.textContent = h.name;
+    const sm = document.createElement('small'); sm.textContent = h.sub; li.appendChild(sm);
+    li.addEventListener('pointerdown', (e) => { e.preventDefault(); choose(i); });
+    results.appendChild(li);
+  });
+  results.hidden = false; q.setAttribute('aria-expanded', 'true');
+  if (sel >= 0) q.setAttribute('aria-activedescendant', 'r' + sel); else q.removeAttribute('aria-activedescendant');
+}
+function choose(i) {
+  const h = hits[i]; if (!h) return;
+  q.value = h.name; closeResults(); q.blur(); hideHint(); closePanel();
+  // with the street map available, cities open at street-map scale like a web map would
+  const city = /^(City|Capital)/.test(h.sub);
+  flyTo(h.lat, h.lon, STREET.state === 'off' || !city ? h.range : rangeForZoom(11.6, h.lat));
+}
+q.addEventListener('input', () => {
+  const s = norm(q.value.trim());
+  clearBtn.hidden = !q.value;
+  if (!s) { closeResults(); return; }
+  const scored = [];
+  for (const p of placesIndex) {
+    const n = p._n || (p._n = norm(p.name));
+    const i = n.indexOf(s);
+    if (i < 0) continue;
+    scored.push([(i === 0 ? 0 : (n[i - 1] === ' ' ? 4 : 8)) + p.pri, p]);
+  }
+  scored.sort((a, b) => a[0] - b[0]);
+  hits = scored.slice(0, 7).map((x) => x[1]);
+  sel = hits.length ? 0 : -1;
+  renderResults();
+});
+q.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' && hits.length) { sel = (sel + 1) % hits.length; renderResults(); e.preventDefault(); }
+  else if (e.key === 'ArrowUp' && hits.length) { sel = (sel - 1 + hits.length) % hits.length; renderResults(); e.preventDefault(); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (sel >= 0) choose(sel); }
+  else if (e.key === 'Escape') { closeResults(); q.blur(); }
+});
+q.addEventListener('blur', () => setTimeout(closeResults, 120));
+q.addEventListener('focus', () => { if (q.value.trim()) q.dispatchEvent(new Event('input')); });
+clearBtn.addEventListener('click', () => { q.value = ''; clearBtn.hidden = true; closeResults(); q.focus(); });
+
+/* ---------------- HUD ---------------- */
+const altEl = $('#alt'), curEl = $('#cursor'), scaleTxt = $('#scaleTxt'), scaleBar = $('#scaleBar'), needle = $('#needle');
+let hudT = 0;
+function updateHud(now) {
+  needle.style.transform = `rotate(${-view.heading}deg)`;
+  tiltBtn.setAttribute('aria-pressed', String(view.tilt > 2));
+  if (now - hudT < 90) return;
+  hudT = now;
+  const altKm = (camera.position.length() - 1) * EARTH_KM;
+  altEl.textContent = 'Camera ' + Math.round(altKm).toLocaleString() + ' km';
+  if (STREET.active) curEl.textContent = STREET.cursor;
+  else if (hover && !drag) {
+    const ll = pick(hover.x, hover.y);
+    curEl.textContent = ll ? fmtLL(ll.lat, ll.lon, true) : '';
+  } else if (!hover) curEl.textContent = '';
+  const mpp = (view.range * EARTH_KM * 1000 * 2 * Math.tan((camera.fov / 2) * DEG)) / H;
+  const maxM = mpp * 110;
+  const pow = Math.pow(10, Math.floor(Math.log10(maxM)));
+  const nice = [5, 2, 1].map((m) => m * pow).find((v) => v <= maxM) || pow;
+  scaleBar.style.width = Math.round(nice / mpp) + 'px';
+  scaleTxt.textContent = nice >= 1000 ? (nice / 1000).toLocaleString() + ' km' : nice + ' m';
+}
+
+/* ---------------- Memoir bridge ----------------
+   The React app (parent window) sends
+     { type: 'memoir:config', details?, rotation?, pins?, stage?, controls?, focus?, paused?, placing?, draft?, intro?, showcase? }.
+   intro { cx, cy, r, lat, lon, jump? } frames the globe for the sign-in porthole (null returns to the home
+   layout); showcase { lat, lon, image, label? } is the decorative photo pin there (null makes it vanish).
+   Sent back: { type: 'memoir:ready' } once this page listens for settings; { type: 'memoir:pin', id } on pin click; { type: 'memoir:place', lat, lon } when the user drops
+   or drags the new post's pin (placing mode); and { type: 'memoir:surface', light } when the view switches
+   between the dark globe and the light 2D map (so the app can recolour its text). */
+const rot = { on: true, speed: 2, resumeMs: 5000, ramp: 0 }; // speed in degrees of longitude per second
+let lastInput = -1e9;
+const poke = () => { lastInput = performance.now(); rot.ramp = 0; };
+canvas.addEventListener('pointerdown', poke);
+canvas.addEventListener('wheel', poke, { passive: true });
+window.addEventListener('keydown', poke);
+
+const pinLayer = document.createElement('div');
+pinLayer.id = 'pins';
+document.body.appendChild(pinLayer);
+const PIN_SVG = '<svg viewBox="0 0 26 36" aria-hidden="true"><path fill="#fff" d="M13 0C5.8 0 0 5.7 0 12.8 0 22.4 13 36 13 36s13-13.6 13-23.2C26 5.7 20.2 0 13 0z"/><circle cx="13" cy="12.6" r="4.7" fill="#1f2b3d"/></svg>';
+let pins = [], pinVis = 1, pinTarget = 1, configured = false, memoirPaused = false;
+const pinNdc = new V3();
+
+function setPins(list) {
+  for (const p of pins) p.el.remove(); // leaves the pin being placed alone
+  pins = list.map((p) => {
+    const el = document.createElement('button');
+    el.type = 'button'; el.className = 'pin'; el.innerHTML = PIN_SVG;
+    el.setAttribute('aria-label', p.label || 'Memory');
+    el.addEventListener('click', () => { poke(); parent.postMessage({ type: 'memoir:pin', id: p.id }, location.origin); });
+    pinLayer.appendChild(el);
+    return { id: p.id, lat: p.lat, lon: p.lon, v: llv(p.lat, p.lon, 1.0005), el, state: '' };
+  });
+}
+
+/* placing mode: the pin for a new post. Click the map to drop it, drag it to adjust. */
+let placing = false, draft = null; // draft: { lat, lon, v, el, state, always }
+const DRAFT_SVG = '<svg viewBox="0 0 26 36" aria-hidden="true"><path fill="#3a92d0" stroke="#fff" stroke-width="1.6" d="M13 1C6.4 1 1 6.2 1 12.8 1 21.9 13 34.6 13 34.6S25 21.9 25 12.8C25 6.2 19.6 1 13 1z"/><circle cx="13" cy="12.6" r="4.4" fill="#fff"/></svg>';
+
+/** Map position under a screen point: the street map when it's showing, otherwise the globe. */
+function locateAt(x, y) {
+  if (STREET.active && STREET.map) { const ll = STREET.map.unproject([x, y]); return { lat: clamp(ll.lat, -89.9, 89.9), lon: wrap(ll.lng) }; }
+  return pick(x, y);
+}
+const reportPlace = () => draft && parent.postMessage({ type: 'memoir:place', lat: draft.lat, lon: draft.lon }, location.origin);
+
+function setDraft(ll, animate) {
+  if (!ll) { if (draft) { draft.el.remove(); draft = null; } return; }
+  if (!draft) {
+    const el = document.createElement('button');
+    el.type = 'button'; el.className = 'pin is-draft'; el.innerHTML = DRAFT_SVG;
+    el.setAttribute('aria-label', 'Where you took the photo. Drag to adjust.');
+    pinLayer.appendChild(el);
+    draft = { el, state: '', always: true };
+    let grab = null;
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation(); poke();
+      el.setPointerCapture(e.pointerId);
+      const r = el.getBoundingClientRect(); // the pin's tip is at the bottom centre
+      grab = { dx: e.clientX - (r.left + r.width / 2), dy: e.clientY - r.bottom };
+      el.classList.add('is-dragging');
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!grab) return;
+      const ll = locateAt(e.clientX - grab.dx, e.clientY - grab.dy);
+      if (ll) { draft.lat = ll.lat; draft.lon = ll.lon; llv(ll.lat, ll.lon, 1.0005, draft.v); }
+    });
+    const end = () => { if (!grab) return; grab = null; el.classList.remove('is-dragging'); reportPlace(); };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    draft.v = new V3();
+  }
+  draft.lat = ll.lat; draft.lon = wrap(ll.lon);
+  llv(draft.lat, draft.lon, 1.0005, draft.v);
+  if (animate) { draft.el.classList.remove('is-dropped'); void draft.el.offsetWidth; draft.el.classList.add('is-dropped'); }
+}
+
+// a click (not a drag) on the globe or street map drops the pin there
+let press = null;
+document.addEventListener('pointerdown', (e) => {
+  press = placing && e.button === 0 && (e.target === canvas || STREET.el.contains(e.target)) ? { x: e.clientX, y: e.clientY, t: performance.now() } : null;
+}, true);
+document.addEventListener('pointerup', (e) => {
+  if (!press || !placing) return;
+  const quick = Math.hypot(e.clientX - press.x, e.clientY - press.y) < 6 && performance.now() - press.t < 600;
+  press = null;
+  if (!quick) return;
+  const ll = locateAt(e.clientX, e.clientY);
+  if (ll) { setDraft(ll, true); reportPlace(); }
+}, true);
+
+function setPlacing(on) {
+  placing = on;
+  document.body.classList.toggle('memoir-placing', on);
+  if (!on) setDraft(null);
+}
+
+/* sign-in screen: the porthole framing and its decorative photo pin */
+function introRange() { // camera distance that shows the globe with a radius of intro.r px
+  const tanV = Math.tan((camera.fov / 2) * DEG);
+  return clamp(1 / Math.sin(Math.atan(((2 * intro.r) / H) * tanV)) - 1, 1, MAX_RANGE);
+}
+const INTRO_FLY_MS = 1500, INTRO_EXIT_MS = 1700;
+function setIntro(v) {
+  if (!v) {
+    if (!intro.on) return;
+    // signed in: the camera pulls back out to the home layout while the app opens the window up
+    intro.on = false;
+    const dur = reduceMotion ? 1 : INTRO_EXIT_MS;
+    flyTo(HOME.lat, HOME.lon, homeR, { dur });
+    introTween = { from: introMix, to: 0, start: performance.now(), dur };
+    return;
+  }
+  if (![v.cx, v.cy, v.r, v.lat, v.lon].every(Number.isFinite)) return;
+  const moved = !intro.on || Math.abs(v.lat - intro.lat) > 1e-6 || Math.abs(wrap(v.lon - intro.lon)) > 1e-6;
+  Object.assign(intro, { on: true, cx: v.cx, cy: v.cy, r: Math.max(20, v.r), lat: v.lat, lon: wrap(v.lon) });
+  if (v.jump || reduceMotion) { // the first framing after load, before the globe is on screen
+    flight = null; anim = null; vel.lat = vel.lon = 0; zoomAnchor = null;
+    view.lat = intro.lat; view.lon = intro.lon; view.heading = 0; view.tilt = 0;
+    view.range = goal.range = introRange();
+    introMix = 1; introTween = null;
+  } else if (moved) { // the other port window (sign in ↔ sign up), or back from home after signing out
+    flyTo(intro.lat, intro.lon, introRange(), { dur: INTRO_FLY_MS });
+    if (introMix < 1) introTween = { from: introMix, to: 1, start: performance.now(), dur: INTRO_FLY_MS };
+  } else if (flight) flight.r1 = introRange(); // resized mid-flight
+  else view.range = goal.range = introRange(); // resized
+}
+
+let showcase = null;
+const leavingPins = [];
+function setShowcase(s) {
+  const same = s && showcase && s.lat === showcase.lat && s.lon === showcase.lon && s.image === showcase.image;
+  if (same) return;
+  if (showcase) {
+    const old = showcase;
+    showcase = null;
+    old.el.classList.add('is-leaving');
+    leavingPins.push(old);
+    setTimeout(() => { old.el.remove(); leavingPins.splice(leavingPins.indexOf(old), 1); }, reduceMotion ? 0 : 450);
+  }
+  if (!s || !Number.isFinite(s.lat) || !Number.isFinite(s.lon) || typeof s.image !== 'string') return;
+  const el = document.createElement('div');
+  el.className = 'pin is-photo';
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '<span class="photo-stem"></span><span class="photo-stack"><span class="photo-back"></span>' +
+    '<span class="photo-card"><img alt="" decoding="async"></span></span><span class="photo-dot"></span><span class="photo-tag"></span>';
+  el.querySelector('img').src = s.image;
+  el.querySelector('.photo-tag').textContent = typeof s.label === 'string' ? s.label : '';
+  pinLayer.appendChild(el);
+  showcase = { lat: s.lat, lon: s.lon, image: s.image, v: llv(s.lat, s.lon, 1.0005), el, state: '', always: true, deco: true };
+}
+
+function placePins(dt) {
+  pinVis += (pinTarget - pinVis) * (1 - Math.exp(-dt / 160));
+  if (Math.abs(pinTarget - pinVis) < 0.002) pinVis = pinTarget;
+  const camLen = camera.position.length();
+  let all = pins;
+  if (draft || showcase || leavingPins.length) {
+    all = pins.slice();
+    if (draft) all.push(draft);
+    if (showcase) all.push(showcase);
+    all.push(...leavingPins);
+  }
+  for (const p of all) {
+    let x, y;
+    // a point on the unit sphere faces the camera when p·cam > 1; fade out just before the limb.
+    // The camera follows the street map too (onStreetMove), so this horizon test holds there as well.
+    let a = smooth(0, 0.08, (p.v.dot(camera.position) - 1) / Math.max(1e-6, camLen - 1));
+    if (STREET.active && STREET.map) {
+      // the street map's globe projection also puts points from the far side of the Earth on screen,
+      // so only pins on this side of the horizon are shown
+      const pt = STREET.map.project([p.lon, p.lat]);
+      x = pt.x; y = pt.y;
+      if (!(x > -40 && x < W + 40 && y > -40 && y < H + 60)) a = 0;
+    } else {
+      pinNdc.copy(p.v).project(camera);
+      x = ((pinNdc.x + 1) / 2) * W; y = ((1 - pinNdc.y) / 2) * H;
+    }
+    if (!p.always) a *= pinVis; // the details toggle hides memory pins, never the one being placed
+    p.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    p.el.style.opacity = a.toFixed(3);
+    const state = a <= 0 ? 'hidden' : a > 0.4 ? 'live' : 'fading';
+    if (state !== p.state) {
+      p.state = state;
+      p.el.style.visibility = state === 'hidden' ? 'hidden' : '';
+      if (!p.deco) {
+        p.el.style.pointerEvents = state === 'live' ? 'auto' : 'none';
+        p.el.tabIndex = state === 'live' ? 0 : -1;
+      }
+    }
+  }
+}
+
+function setDetails(on) {
+  toggleLabels(on);
+  borderTarget = on ? 1 : 0;
+  $('#borders').checked = on; // keep the sunlight panel's Borders box in step
+  pinTarget = on ? 1 : 0;
+  if (!configured) { borderVis = borderTarget; pinVis = pinTarget; configured = true; } // first value applies without a fade
+}
+
+// Every key is optional, so the app can send only what changed.
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin || !e.data || e.data.type !== 'memoir:config') return;
+  const m = e.data;
+  if (Array.isArray(m.pins)) setPins(m.pins);
+  if (typeof m.details === 'boolean') setDetails(m.details);
+  if (m.rotation) {
+    rot.on = !!m.rotation.enabled;
+    rot.speed = clamp(Number(m.rotation.degPerSec) || 0, 0, 90);
+    if (m.rotation.resumeAfterMs >= 0) rot.resumeMs = m.rotation.resumeAfterMs;
+  }
+  if (m.stage) {
+    if (Number.isFinite(m.stage.bottom)) stage.bottom = m.stage.bottom;
+    if (Number.isFinite(m.stage.left)) stage.left = m.stage.left;
+    relayout();
+  }
+  if (typeof m.paused === 'boolean') memoirPaused = m.paused;
+  if (typeof m.placing === 'boolean') setPlacing(m.placing);
+  if ('draft' in m && placing) {
+    const d = m.draft;
+    if (!d) setDraft(null);
+    else if (Number.isFinite(d.lat) && Number.isFinite(d.lon) && (!draft || Math.abs(d.lat - draft.lat) > 1e-7 || Math.abs(wrap(d.lon - draft.lon)) > 1e-7)) setDraft(d, true);
+  }
+  if (typeof m.controls === 'boolean') {
+    document.body.classList.toggle('memoir-no-controls', !m.controls);
+    if (!m.controls) closePanel();
+  }
+  if (m.focus && Number.isFinite(m.focus.lat) && Number.isFinite(m.focus.lon)) {
+    poke();
+    flyTo(m.focus.lat, m.focus.lon, clamp(Number(m.focus.range) || 1.4, MIN_RANGE, MAX_RANGE));
+  }
+  if ('intro' in m) setIntro(m.intro);
+  if ('showcase' in m) setShowcase(m.showcase);
+});
+// Ready for settings now, well before the imagery has loaded (the iframe's load event can come much later),
+// so the first frame on screen already has the app's layout.
+parent.postMessage({ type: 'memoir:ready' }, location.origin);
+
+let surfaceLight = false;
+function reportSurface() {
+  const light = STREET.opacity > 0.5 || MAP.mix > 0.5;
+  if (light !== surfaceLight) { surfaceLight = light; parent.postMessage({ type: 'memoir:surface', light }, location.origin); }
+}
+
+/* ---------------- frame loop ---------------- */
+let last = performance.now(), t0 = last;
+const lastMat = new THREE.Matrix4(), lastProj = new THREE.Matrix4();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(64, now - last); last = now;
+  if (document.hidden || memoirPaused) return; // paused: something full-screen covers the globe
+
+  if (STREET.active) {
+    // view is synced from the street map in onStreetMove
+  } else if (flight) {
+    const k = clamp((now - flight.start) / flight.dur, 0, 1), e = ease(k);
+    const ll = vll(slerpDir(flight.a, flight.b, flight.ang, e, tmpC));
+    view.lat = ll.lat; view.lon = ll.lon;
+    view.range = goal.range = Math.exp(lerp(Math.log(flight.r0), Math.log(flight.r1), e)) + flight.peak * Math.sin(Math.PI * e);
+    view.heading = flight.h0 + wrap(flight.h1 - flight.h0) * e;
+    view.tilt = lerp(flight.t0, flight.t1, e);
+    if (k >= 1) flight = null;
+  } else {
+    if (!drag && (vel.lat || vel.lon)) {
+      view.lat = clamp(view.lat + vel.lat * dt, -89, 89); view.lon = wrap(view.lon + vel.lon * dt);
+      const d = Math.exp(-dt / 320); vel.lat *= d; vel.lon *= d;
+      if (Math.abs(vel.lat) + Math.abs(vel.lon) < 2e-6) vel.lat = vel.lon = 0;
+    }
+    if (anim) {
+      const k = clamp((now - anim.start) / anim.dur, 0, 1), e = ease(k);
+      view.heading = anim.h0 + wrap(anim.h1 - anim.h0) * e;
+      view.tilt = lerp(anim.t0, anim.t1, e);
+      if (k >= 1) anim = null;
+    }
+    // Memoir idle spin: west to east like the real Earth, paused while the user is touching it
+    // and for a few seconds after, then eased back in. Off when zoomed in close.
+    if (drag || pointers.size) lastInput = now;
+    const idle = rot.on && !reduceMotion && !anim && !vel.lat && !vel.lon && now - lastInput > rot.resumeMs && view.range > 0.6;
+    rot.ramp = idle ? Math.min(1, rot.ramp + dt / 1500) : 0;
+    if (rot.ramp) view.lon = wrap(view.lon - rot.speed * smooth(0, 1, rot.ramp) * dt / 1000);
+    if (Math.abs(Math.log(goal.range / view.range)) > 1e-4) {
+      const k = 1 - Math.exp(-dt / (reduceMotion ? 1 : 110));
+      view.range = Math.exp(lerp(Math.log(view.range), Math.log(goal.range), k));
+      updateCamera();
+      if (zoomAnchor) {
+        const cur = pick(zoomAnchor.x, zoomAnchor.y);
+        if (cur) {
+          view.lat = clamp(view.lat + clamp(zoomAnchor.ll.lat - cur.lat, -8, 8), -89, 89);
+          view.lon = wrap(view.lon + clamp(wrap(zoomAnchor.ll.lon - cur.lon), -8, 8));
+        }
+      }
+    } else { view.range = goal.range; zoomAnchor = null; }
+  }
+  homeShift.x += (homeShift.target - homeShift.x) * (1 - Math.exp(-dt / (reduceMotion ? 1 : 130)));
+  if (Math.abs(homeShift.target - homeShift.x) < 0.3) homeShift.x = homeShift.target;
+  if (introTween) { // in step with the fly-to that started with it (same duration and easing)
+    const k = clamp((now - introTween.start) / introTween.dur, 0, 1);
+    introMix = lerp(introTween.from, introTween.to, ease(k));
+    if (k >= 1) introTween = null;
+  }
+  syncStreetPadding();
+  updateCamera();
+  updateSun();
+
+  // per-frame uniforms
+  const tSec = (now - t0) / 1000;
+  U.uCloudShift.value = (tSec * 0.000012) % 1;
+  cloudVis += (cloudTarget - cloudVis) * (1 - Math.exp(-dt / 180));
+  const altKm = (camera.position.length() - 1) * EARTH_KM;
+  const bundled = STREET.state === 'off';
+  if (bundled && altKm < 2600) ensureMapData();
+  MAP.on = bundled && (MAP.on ? altKm < MAP_OFF_KM : altKm < MAP_ON_KM);
+  if (!MAP.on) MAP.wantSince = now;
+  const mapReady = MAP.win && Math.abs(view.lat - (MAP.win.lat0 + MAP.win.latSpan / 2)) < MAP.win.latSpan / 2 &&
+    Math.abs(wrap(view.lon - MAP.win.lonC)) < MAP.win.lonSpan / 2;
+  const mapTarget = MAP.on && (mapReady || now - MAP.wantSince > 1500) ? 1 : 0;
+  MAP.mix += (mapTarget - MAP.mix) * (1 - Math.exp(-dt / (reduceMotion ? 1 : 90)));
+  if (Math.abs(mapTarget - MAP.mix) < 0.002) MAP.mix = mapTarget;
+  U.uMapMix.value = MAP.mix;
+  U.uCloudAmt.value = cloudVis * (1 - MAP.mix);
+  if (bundled && altKm < 1100) { const before = MAP.mix; updateMap(now); if (MAP.mix !== before) labelsDirty = true; }
+  updateStreet(now, dt, altKm);
+  if (MAP.mix > 0 && MAP.mix < 1) labelsDirty = true;
+  borderVis += (borderTarget - borderVis) * (1 - Math.exp(-dt / 160));
+  const z = zoomLevel();
+  // the porthole view is close enough to show the imagery's softness: more of the 8K relief layer, and sharpening
+  earthMat.uniforms.uDetailAmt.value = hasDetail ? Math.max(0.35 + 0.65 * smooth(3.5, 6.5, z), 0.62 * introMix) : 0;
+  post.material.uniforms.uSharp.value = 0.55 * introMix;
+  const radPerPx = (view.range * 2 * Math.tan((camera.fov / 2) * DEG)) / H;
+  stateMat.uniforms.uDash.value = 1 / (radPerPx * 7.5);
+  stateMat.uniforms.uVis.value = borderVis * smooth(1.6, 2.6, z) * (1 - MAP.mix);
+  countryMat.uniforms.uVis.value = borderVis * (1 - MAP.mix);
+  countryMat.uniforms.uOpacity.value = lerp(0.52, 0.8, smooth(3, 6, z));
+
+  if (started && STREET.opacity < 0.999) {
+    renderer.setRenderTarget(rt);
+    renderer.setClearColor(0x000000, 1);
+    renderer.clear(true, true, false);
+    renderer.render(skyScene, skyCam);
+    renderer.clearDepth();
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    renderer.render(postScene, postCam);
+  }
+
+  if (!camera.matrixWorld.equals(lastMat)) { lastMat.copy(camera.matrixWorld); labelsDirty = true; }
+  // Memoir's view offset (globe lifted / slid aside) changes the projection, not the camera pose
+  if (!camera.projectionMatrix.equals(lastProj)) { lastProj.copy(camera.projectionMatrix); labelsDirty = true; }
+  if (labelsDirty && STREET.opacity < 0.999) labelsDirty = drawLabels(now);
+  updateHud(now);
+  placePins(dt);
+  reportSurface();
+}
+
+window.addEventListener('resize', resize);
+resize();
+view.range = goal.range = homeR;
+updateCamera();
+requestAnimationFrame(frame);
+})();
+</script>

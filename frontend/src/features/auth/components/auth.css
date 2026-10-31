@@ -1,0 +1,560 @@
+/* Sign in / sign up: the globe through a porthole window, the form beside it. Sizes follow the 1440×900 design.
+   The window's insets (--pw-*) drive both the porthole bezel and the clip on the app's globe behind it,
+   so the two always line up, also while the window opens up after signing in (.app.is-entering). */
+
+.app {
+  --bezel: 30px;
+  --pw-top: 70px;
+  --pw-left: 70px;
+  --pw-bottom: 70px;
+  --pw-right: 500px; /* 40 margin + 380 column + 50 gap + 30 bezel */
+  --pw-round: 40px;
+  --auth-col: 380px;
+  --auth-margin: 40px;
+  --open: 1.2s cubic-bezier(0.7, 0, 0.2, 1) 0.15s;
+}
+
+/* signed in: the window opens to the whole screen and the bezel slides off the edges */
+.app.is-entering {
+  --pw-top: 0px;
+  --pw-left: 0px;
+  --pw-bottom: 0px;
+  --pw-right: 0px;
+  --pw-round: 0px;
+}
+
+.app.is-auth,
+.app.is-entering {
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 160px), #0a0c0f;
+}
+
+.app.is-auth .globe,
+.app.is-entering .globe {
+  clip-path: inset(var(--pw-top) var(--pw-right) var(--pw-bottom) var(--pw-left) round var(--pw-round));
+}
+
+.app.is-entering .globe {
+  transition: clip-path var(--open);
+}
+
+.auth {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+/* ---------- porthole ---------- */
+
+.porthole {
+  position: absolute;
+  inset: calc(var(--pw-top) - var(--bezel)) calc(var(--pw-right) - var(--bezel)) calc(var(--pw-bottom) - var(--bezel)) calc(var(--pw-left) - var(--bezel));
+  border: var(--bezel) solid #1a1d22;
+  border-radius: calc(var(--pw-round) + var(--bezel));
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.04), 0 40px 90px rgba(0, 0, 0, 0.6);
+}
+
+.app.is-entering .porthole {
+  transition: inset var(--open), border-radius var(--open);
+}
+
+/* offsets are from the window's edge (the porthole's padding box); the bezel is around it */
+.rivet {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #70757d, #2b2e34 70%);
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.7);
+}
+
+.rivet.is-tl { top: 4px; left: 4px; }
+.rivet.is-tr { top: 4px; right: 4px; }
+.rivet.is-bl { bottom: 4px; left: 4px; }
+.rivet.is-br { bottom: 4px; right: 4px; }
+.rivet.is-t { top: -9px; left: calc(50% - 4px); }
+.rivet.is-b { bottom: -9px; left: calc(50% - 4px); }
+.rivet.is-l { left: -9px; top: calc(50% - 4px); }
+.rivet.is-r { right: -9px; top: calc(50% - 4px); }
+
+.porthole-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--pw-round);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 0 70px rgba(0, 0, 0, 0.55);
+  transition: opacity 0.5s ease;
+}
+
+.auth.is-leaving .porthole-glass {
+  opacity: 0;
+}
+
+.porthole-tag {
+  position: absolute;
+  top: 26px;
+  left: 28px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(226, 230, 236, 0.8);
+}
+
+.porthole-tag.is-right {
+  left: auto;
+  right: 28px;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f4b740;
+  box-shadow: 0 0 8px rgba(244, 183, 64, 0.8);
+  animation: live-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  50% { opacity: 0.35; }
+}
+
+/* ---------- form column ---------- */
+
+/* a scroll container clips sideways too, so it gets a 16px gutter: room for the logo's overhang */
+.auth-side {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(var(--auth-margin) - 16px);
+  width: calc(var(--auth-col) + 32px);
+  display: flex;
+  flex-direction: column;
+  padding: 28px 16px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.55, 0, 0.75, 0.2);
+}
+
+.auth.is-leaving .auth-side {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+.auth-column {
+  margin: auto 0; /* centred, but scrolls from the top when it doesn't fit */
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 22px -9px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.auth-brand img {
+  width: 54px;
+  height: 54px;
+}
+
+.auth-card {
+  padding: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 28px;
+  background: linear-gradient(180deg, #16191e, #111317);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  animation: auth-card-in 0.4s ease both;
+}
+
+@keyframes auth-card-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+.auth-eyebrow {
+  margin: 0;
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: #8d929a;
+}
+
+.auth-title {
+  margin: 14px 0 0;
+  font-size: 32px;
+  line-height: 1.14;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  color: #f5f6f8;
+}
+
+.auth-sub {
+  margin: 10px 0 26px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #a8adb5;
+}
+
+.auth-field {
+  margin-bottom: 18px;
+}
+
+.auth-field label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #e7e9ec;
+}
+
+.auth-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 52px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: #0b0d10;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-input:focus-within {
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+}
+
+.auth-check input[aria-invalid='true'] {
+  box-shadow: 0 0 0 2px rgba(240, 113, 103, 0.9);
+}
+
+.auth-input:has(input[aria-invalid='true']) {
+  border-color: rgba(240, 113, 103, 0.85);
+}
+
+.auth-input > svg {
+  position: absolute;
+  left: 17px;
+  width: 17px;
+  height: 17px;
+  color: #8d929a;
+  pointer-events: none;
+}
+
+.auth-input input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 16px 0 46px;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: #eef0f2;
+  font: 400 15px/1 var(--font);
+  outline: none;
+}
+
+.auth-input input::placeholder {
+  color: #7a7f88;
+}
+
+/* browser autofill keeps the dark field */
+.auth-input input:-webkit-autofill {
+  -webkit-text-fill-color: #eef0f2;
+  box-shadow: 0 0 0 100px #0b0d10 inset;
+  caret-color: #eef0f2;
+}
+
+.auth-input:has(.auth-eye) input {
+  padding-right: 52px;
+}
+
+.auth-eye {
+  position: absolute;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: #a3a8b0;
+  cursor: pointer;
+}
+
+.auth-eye:hover {
+  color: #fff;
+}
+
+.auth-eye:focus-visible {
+  outline-offset: 0;
+}
+
+.auth-eye svg {
+  width: 18px;
+  height: 18px;
+}
+
+.auth-meter {
+  display: flex;
+  align-items: center;
+  margin: -4px 0 0;
+}
+
+.auth-meter-bars {
+  display: flex;
+  gap: 9px;
+}
+
+.auth-meter-bars i {
+  width: 46px;
+  height: 3px;
+  border-radius: 2px;
+  background: #2a2e35;
+  transition: background-color 0.2s ease;
+}
+
+.auth-meter.is-1 i:nth-child(-n + 1) { background: #ef6b5f; }
+.auth-meter.is-2 i:nth-child(-n + 2) { background: #f0a540; }
+.auth-meter.is-3 i:nth-child(-n + 3) { background: #a3d65c; }
+.auth-meter.is-4 i { background: #3ecf72; }
+
+.auth-meter-label {
+  margin-left: auto;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #9a9fa7;
+}
+
+.auth-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 24px;
+}
+
+.auth-row.is-terms {
+  justify-content: flex-start;
+  gap: 5px;
+  margin-top: 22px;
+}
+
+.auth-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14.5px;
+  color: #e7e9ec;
+  cursor: pointer;
+  user-select: none;
+}
+
+.auth-check input {
+  appearance: none;
+  display: grid;
+  place-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border-radius: 4px;
+  background: #eef0f3;
+  cursor: pointer;
+}
+
+.auth-check input::after {
+  content: '';
+  width: 9px;
+  height: 5px;
+  margin-top: -2px;
+  border: solid #0d0f12;
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg) scale(0);
+  transition: transform 0.12s ease;
+}
+
+.auth-check input:checked::after {
+  transform: rotate(-45deg) scale(1);
+}
+
+.auth-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #8cb4ff;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-link.is-underlined {
+  font-size: 14.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-error,
+.auth-note {
+  margin: -8px 0 16px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.auth-error {
+  background: rgba(239, 107, 95, 0.12);
+  color: #ffb4ab;
+}
+
+.auth-note {
+  background: rgba(140, 180, 255, 0.1);
+  color: #c9dbff;
+}
+
+.auth-note.is-ok {
+  background: rgba(62, 207, 114, 0.12);
+  color: #b6f0c8;
+}
+
+/* above the fields, under the subtitle */
+.auth-sub + .auth-note {
+  margin: -10px 0 20px;
+}
+
+.auth-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 52px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: #eef0f3;
+  color: #0d0f12;
+  font-size: 15.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.12s ease;
+}
+
+.auth-submit svg {
+  width: 17px;
+  height: 17px;
+  transition: transform 0.2s ease;
+}
+
+.auth-submit:hover {
+  background: #fff;
+}
+
+.auth-submit:hover svg {
+  transform: translateX(3px);
+}
+
+.auth-submit:active {
+  transform: scale(0.985);
+}
+
+.auth-submit:disabled {
+  background: #d6d9de;
+  cursor: progress;
+}
+
+.auth-switch {
+  margin: 34px 0 0;
+  text-align: center;
+  font-size: 14.5px;
+  color: #9ba0a8;
+}
+
+.auth-switch button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #f1f2f4;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-switch button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- other screen sizes ---------- */
+
+/* short laptop screens: tighten the form so sign-up fits without scrolling */
+@media (max-height: 860px) and (min-width: 861px) {
+  .auth-brand { margin-bottom: 12px; }
+  .auth-card { padding: 28px 32px; }
+  .auth-title { margin-top: 12px; font-size: 28px; }
+  .auth-sub { margin: 8px 0 20px; font-size: 14.5px; }
+  .auth-field { margin-bottom: 14px; }
+  .auth-field label { margin-bottom: 6px; }
+  .auth-input,
+  .auth-submit { height: 48px; }
+  .auth-row { margin-bottom: 18px; }
+  .auth-row.is-terms { margin-top: 18px; }
+  .auth-switch { margin-top: 22px; }
+}
+
+/* tablets: a narrower column and bezel */
+@media (max-width: 1100px) {
+  .app {
+    --bezel: 24px;
+    --auth-margin: 28px;
+    --auth-col: 360px;
+    --pw-top: 52px;
+    --pw-left: 52px;
+    --pw-bottom: 52px;
+    --pw-right: 448px; /* 28 + 360 + 36 gap + 24 */
+    --pw-round: 34px;
+  }
+}
+
+/* phones: the window across the top, the form below it */
+@media (max-width: 860px) {
+  .app {
+    --bezel: 12px;
+    --pw-top: 28px;
+    --pw-left: 28px;
+    --pw-right: 28px;
+    --pw-bottom: calc(66% - 28px); /* a window 34% of the screen tall */
+    --pw-round: 24px;
+  }
+  .rivet { display: none; }
+  .porthole-tag { top: 16px; left: 18px; gap: 7px; font-size: 9px; letter-spacing: 0.18em; }
+  .porthole-tag.is-right { right: 18px; }
+  .auth-side { top: calc(34% + 52px); left: 0; right: 0; width: auto; padding: 0 16px 28px; }
+  .auth-column { width: min(100%, 420px); margin: 0 auto; }
+  .auth-brand { margin-bottom: 10px; }
+  .auth-card { padding: 26px 22px; border-radius: 24px; }
+  .auth-title { font-size: 27px; }
+}
+
+@media (max-width: 400px) {
+  .porthole-tag.is-right { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app.is-entering .globe,
+  .app.is-entering .porthole { transition: none; }
+  .auth-card,
+  .live-dot { animation: none; }
+}

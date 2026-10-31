@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Memoir</title>
+  <style>.ink { stroke: #000; } .dot { fill: #000; } @media (prefers-color-scheme: dark) { .ink { stroke: #fff; } .dot { fill: #fff; } }</style>
+  <defs>
+    <mask id="hideBehindFront" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="#fff"/>
+      <g transform="translate(244 258) rotate(-6)">
+        <rect x="-162" y="-192" width="324" height="384" rx="40" fill="#000"/>
+      </g>
+      <rect x="0" y="0" width="230" height="512" fill="#000"/>
+      <rect x="0" y="0" width="330" height="120" fill="#000"/>
+    </mask>
+    <clipPath id="globe"><circle cx="0" cy="-20" r="90"/></clipPath>
+  </defs>
+
+  <g class="ink" fill="none" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <!-- back card (only the part peeking out) -->
+    <g mask="url(#hideBehindFront)">
+      <g transform="translate(270 262) rotate(9)">
+        <rect x="-150" y="-180" width="300" height="360" rx="30"/>
+      </g>
+    </g>
+
+    <!-- front card -->
+    <g transform="translate(244 258) rotate(-6)">
+      <rect x="-150" y="-180" width="300" height="360" rx="30"/>
+      <rect x="-124" y="-154" width="248" height="240" rx="16" stroke-width="7"/>
+
+      <!-- globe -->
+      <circle cx="0" cy="-20" r="90" stroke-width="8"/>
+      <g clip-path="url(#globe)" stroke-width="6">
+        <path d="M-78 -60 C-62 -92 -22 -104 6 -92 C24 -84 36 -88 46 -72 C54 -56 34 -48 20 -52 C6 -56 2 -38 -14 -32 C-32 -26 -46 -38 -56 -50 C-64 -58 -84 -48 -78 -60Z"/>
+        <path d="M-6 -10 C10 -18 30 -12 34 4 C38 22 24 38 12 52 C4 62 -8 64 -12 52 C-16 38 -6 26 -12 12 C-16 2 -14 -6 -6 -10Z"/>
+        <path d="M44 -36 C58 -44 74 -38 78 -24 C80 -12 70 -6 60 -10 C50 -14 44 -22 44 -36Z"/>
+        <path d="M-74 4 C-64 -2 -52 2 -50 12 C-48 22 -58 28 -68 24 C-76 20 -78 10 -74 4Z"/>
+      </g>
+
+      <!-- stars -->
+      <g class="dot" stroke="none">
+        <circle cx="-98" cy="-128" r="5"/>
+        <circle cx="96" cy="-126" r="4"/>
+        <circle cx="-104" cy="54" r="3.5"/>
+        <circle cx="100" cy="46" r="4"/>
+      </g>
+
+      <!-- caption -->
+      <circle cx="-108" cy="136" r="8" stroke-width="6"/>
+      <path d="M-84 136 H8" stroke-width="8"/>
+    </g>
+  </g>
+</svg>

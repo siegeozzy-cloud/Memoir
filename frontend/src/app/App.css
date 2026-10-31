@@ -1,0 +1,329 @@
+/* Home: full-bleed globe, overlays float on top. Measurements follow the 1440-wide design frame. */
+
+.app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.globe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: var(--bg);
+}
+
+/* ---------- signing in ----------
+   The home controls stay mounted but hidden behind the sign-in screen. Once the porthole has opened
+   (auth.css), they ease in: the dock rises, the corner buttons drop in, the fun fact fades up. */
+
+.home-ui {
+  display: contents;
+}
+
+.app.is-checking .home-ui,
+.app.is-auth .home-ui,
+.app.is-entering .home-ui {
+  visibility: hidden;
+}
+
+.app.is-arriving .dock {
+  animation: arrive-rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.app.is-arriving .profile,
+.app.is-arriving .details-toggle {
+  animation: arrive-drop 0.7s ease 0.2s both;
+}
+
+/* no "to" keyframe: they end on their own resting opacity */
+@keyframes arrive-rise {
+  from { opacity: 0; transform: translateY(36px); }
+}
+
+@keyframes arrive-drop {
+  from { opacity: 0; transform: translateY(-8px); }
+}
+
+/* ---------- bottom: fun fact + dock ---------- */
+
+.bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(42px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  justify-items: center;
+  gap: clamp(32px, 4.2vh, 46px); /* about 60% of the design's gap, per review */
+  padding: 0 24px;
+  pointer-events: none; /* drags pass through to the globe */
+}
+
+.fun-fact {
+  width: min(100%, 64rem);
+  margin: 0;
+  text-align: center;
+  font-size: clamp(14px, 1.2vw, 17px);
+  font-weight: 300;
+  line-height: 1.45;
+  letter-spacing: 0.015em;
+  color: var(--ink-soft);
+  text-wrap: balance;
+  transition: color 0.4s ease;
+  animation: fade-in 1.2s ease 0.4s both;
+}
+
+/* Logged Captures covers where the fun fact sits (as in the design). !important beats the fade-in animation. */
+.captures-open .fun-fact {
+  opacity: 0 !important;
+  transition: opacity 0.25s ease;
+}
+
+/* zoomed in far enough that the light 2D map is behind the text */
+.fun-fact.on-map {
+  color: #202124;
+  font-weight: 400;
+  /* the same white halo the map uses on its own labels, so it reads over roads and place names */
+  text-shadow: 0 0 2px #fff, 0 0 6px #fff, 0 0 12px rgba(255, 255, 255, 0.9);
+}
+
+.dock {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 59px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  pointer-events: auto;
+}
+
+.dock-btn {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  cursor: pointer;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.dock-btn svg {
+  width: 32px;
+  height: 32px;
+}
+
+.dock-btn:hover {
+  transform: translateY(-2px);
+}
+
+.dock-btn:active {
+  transform: scale(0.92);
+}
+
+.dock-btn[aria-pressed='true'] {
+  color: #3a92d0;
+}
+
+/* ---------- note under the globe while placing a new post ---------- */
+
+.place-note {
+  position: absolute;
+  right: 0;
+  bottom: calc(42px + 59px + 40px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  justify-content: center;
+  padding: 0 32px;
+  pointer-events: none;
+  animation: fade-in 0.4s ease both;
+}
+
+.place-note p {
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.92);
+  transition: color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* over the busy street map, a soft pill keeps it readable */
+.place-note.on-map p {
+  color: #202124;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+/* ---------- details toggle (top right, under the profile button) ---------- */
+
+.details-toggle {
+  position: absolute;
+  top: calc(74px + env(safe-area-inset-top, 0px));
+  right: calc(20px + env(safe-area-inset-right, 0px));
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.18s ease;
+}
+
+/* the chat panel covers this corner */
+.chat-open .details-toggle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.details-toggle:hover,
+.details-toggle[aria-pressed='true'] {
+  opacity: 1;
+}
+
+.details-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---------- notification tab (top centre) ---------- */
+
+.notif-host {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  z-index: 10;
+}
+
+.notif {
+  /* hangs from the top edge; the extra 24px sits above the screen so the spring overshoot never shows a gap */
+  --hidden-top: 24px;
+  position: absolute;
+  top: calc(-1 * var(--hidden-top));
+  left: 50%;
+  width: min(375px, calc(100vw - 24px));
+  padding: calc(var(--hidden-top) + 26px + env(safe-area-inset-top, 0px)) 28px 13px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 40px 40px;
+  background: var(--bg);
+  transform: translateX(-50%);
+  animation: notif-in 0.55s cubic-bezier(0.22, 1.25, 0.36, 1) both;
+}
+
+.notif.is-leaving {
+  animation: notif-out 0.38s cubic-bezier(0.55, 0, 0.75, 0.2) forwards;
+}
+
+.notif-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notif-text {
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 300;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notif-text strong {
+  font-weight: 600;
+}
+
+.notif-bar {
+  display: block;
+  width: 62%;
+  height: 1px;
+  margin: 13px auto 0;
+  background: rgba(255, 255, 255, 0.6);
+  transform-origin: center;
+  animation: notif-bar linear forwards;
+}
+
+.avatar {
+  flex: none;
+  display: block;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #8d62c8;
+}
+
+.avatar img,
+.avatar svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes notif-in {
+  from { transform: translate(-50%, -110%); }
+  to { transform: translate(-50%, 0); }
+}
+
+@keyframes notif-out {
+  from { transform: translate(-50%, 0); }
+  to { transform: translate(-50%, -110%); }
+}
+
+@keyframes notif-bar {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (max-width: 560px) {
+  .bottom {
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    gap: clamp(28px, 4.2vh, 44px);
+  }
+  .details-toggle {
+    top: auto;
+    bottom: calc(33px + env(safe-area-inset-bottom, 0px));
+    right: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app.is-arriving .dock,
+  .app.is-arriving .details-toggle,
+  .app.is-arriving .profile { animation: none; }
+  .notif { animation: fade-in 0.2s ease both; }
+  .notif.is-leaving { animation: fade-out 0.2s ease forwards; }
+  .dock-btn { transition: none; }
+}
