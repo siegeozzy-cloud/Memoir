@@ -20,10 +20,25 @@ change.
 
 ## 2. Photos and videos (Cloudinary)
 
-1. In the Cloudinary dashboard, open **Programmable Media → Dashboard** and copy the **API environment
-   variable**: `cloudinary://<api key>:<api secret>@<cloud name>`.
-2. That one value is all the API needs. With it set, uploads go to Cloudinary; without it, they go to a
-   local folder, which is what happens on your machine.
+1. In the Cloudinary console, open **Settings → API Keys** (or the **Dashboard** card headed *Product
+   Environment Credentials*). Copy the **cloud name**, **API key** and **API secret** — the real ones,
+   not the `<your_api_key>` text shown in their documentation. The secret is hidden until you click the
+   eye or copy button.
+2. Put them together into one value:
+
+   ```
+   cloudinary://<API key>:<API secret>@<cloud name>
+   ```
+
+   For example, with cloud name `fzpweior`: `cloudinary://123456789012345:AbCdEf-GhIjKlMnOp@fzpweior`.
+3. In Render, the **Key** is `CLOUDINARY_URL` and the **Value** is only that line — no `CLOUDINARY_URL=`
+   in front of it, and no quotes around it.
+
+That one value is all the API needs. With it set, uploads go to Cloudinary; without it, they go to a
+local folder, which is what happens on your machine.
+
+If it's wrong, the server now says so on start-up ("CLOUDINARY_URL still has the <your_api_key>
+placeholders in it") instead of crashing with a stack trace.
 
 Everything lands under a `memoir/` folder in your account, so the same account can hold other projects.
 Photos are still shrunk and stripped of their hidden data (including the GPS location) before they leave

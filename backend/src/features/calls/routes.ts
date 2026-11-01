@@ -34,12 +34,19 @@ function endCall(call: Call, by: string, reason: string) {
   send(by, { channel: 'call', type: 'call:ended', callId: call.id, reason })
 }
 
-/** Short-lived credentials for coturn's shared-secret mode: the username carries its own expiry. */
+/**
+ * How the relay checks who's calling, in the two shapes TURN servers come in:
+ *
+ * - a **fixed username and password**, which is what hosted providers (Metered, Twilio) hand out;
+ * - a **shared secret**, coturn's own scheme, where the server works out a username that carries its
+ *   own expiry and signs it. Nothing has to be stored, and the credentials go stale on their own.
+ */
 function turnCredentials() {
   if (!config.turnConfigured) return null
+  const urls = config.turnUrls
+  if (config.TURN_USERNAME && config.TURN_PASSWORD) return { urls, username: config.TURN_USERNAME, credential: config.TURN_PASSWORD }
   const username = `${Math.floor(Date.now() / 1000) + config.TURN_TTL}:memoir`
-  const credential = createHmac('sha1', config.TURN_SECRET!).update(username).digest('base64')
-  return { urls: config.TURN_URL!, username, credential }
+  return { urls, username, credential: createHmac('sha1', config.TURN_SECRET!).update(username).digest('base64') }
 }
 
 export default async function callRoutes(app: FastifyInstance) {

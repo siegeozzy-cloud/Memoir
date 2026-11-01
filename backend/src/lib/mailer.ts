@@ -3,7 +3,16 @@ import { config } from '../config.ts'
 
 export type Mail = { to: string; subject: string; text: string; html: string }
 
-const transport = config.SMTP_URL ? nodemailer.createTransport(config.SMTP_URL) : null
+/** A mail server that hangs shouldn't hold a sign-up open for minutes; nodemailer reads these from the URL. */
+function withTimeouts(url: string) {
+  const u = new URL(url)
+  for (const [key, value] of Object.entries({ connectionTimeout: '10000', greetingTimeout: '10000', socketTimeout: '20000' })) {
+    if (!u.searchParams.has(key)) u.searchParams.set(key, value)
+  }
+  return u.toString()
+}
+
+const transport = config.SMTP_URL ? nodemailer.createTransport(withTimeouts(config.SMTP_URL)) : null
 
 /** Emails sent while testing, newest last (only kept when NODE_ENV=test). */
 export const testOutbox: Mail[] = []

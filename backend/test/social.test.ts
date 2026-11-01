@@ -272,11 +272,11 @@ test('calls: the app is given STUN, and TURN credentials when one is set up', as
   assert.ok(iceServers[0].urls.length, 'at least one STUN server')
   if (turnConfigured) {
     const turn = iceServers.at(-1)
-    assert.match(turn.urls, /^turns?:/)
-    // coturn's shared-secret mode: the username carries its own expiry, so there are no accounts to keep
-    const [expiry] = turn.username.split(':')
-    assert.ok(Number(expiry) > Date.now() / 1000)
-    assert.ok(turn.credential.length > 20)
+    for (const url of [turn.urls].flat()) assert.match(url, /^turns?:/)
+    assert.ok(turn.username && turn.credential, 'the relay is given something to check')
+    // coturn's shared-secret mode puts an expiry in the username; a hosted relay uses a fixed one
+    const [maybeExpiry] = String(turn.username).split(':')
+    if (/^\d{10}$/.test(maybeExpiry)) assert.ok(Number(maybeExpiry) > Date.now() / 1000, 'not already expired')
   }
 })
 

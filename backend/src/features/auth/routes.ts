@@ -46,7 +46,12 @@ async function sendVerification(user: UserRow, force = false) {
     await tx.delete(emailTokens).where(and(eq(emailTokens.userId, user.id), eq(emailTokens.purpose, 'verify')))
     await tx.insert(emailTokens).values({ id: hashToken(token), userId: user.id, purpose: 'verify', expiresAt: new Date(Date.now() + VERIFY_TTL) })
   })
-  await sendMail(verifyEmail(user.email, user.name, `${config.apiOrigin}/api/auth/verify?token=${token}`))
+  // if the mail server is down, the account still exists and "resend" can try again later
+  try {
+    await sendMail(verifyEmail(user.email, user.name, `${config.apiOrigin}/api/auth/verify?token=${token}`))
+  } catch (e) {
+    console.error(`Couldn’t send the confirmation email to ${user.email}:`, (e as Error).message)
+  }
 }
 
 async function insertUser(values: Omit<typeof users.$inferInsert, 'uniqueId'>) {
@@ -72,7 +77,7 @@ export default async function authRoutes(app: FastifyInstance) {
     const passwordHash = await hash(input.password)
     const existing = await db.query.users.findFirst({ where: eq(users.email, input.email) })
     if (existing?.emailVerifiedAt) {
-      await sendMail(alreadyRegistered(existing.email, existing.name))
+      await sendMail(alreadyRegistered(existing.email, existing.name)).catch((e: Error) => console.error('Couldn’t send the "already registered" email:', e.message))
     } else if (existing) {
       // never confirmed: the newest sign-up's details win, and older links stop working,
       // so only whoever can read the inbox decides which password the account ends up with
