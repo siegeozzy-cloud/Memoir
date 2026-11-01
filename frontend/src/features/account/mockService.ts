@@ -7,7 +7,7 @@ import type { AccountService, NotificationPrefs, Profile } from './service'
 const KEY = 'memoir.profile'
 const SESSION_KEY = 'memoir.session' // saved by the mock auth service
 
-type Stored = { name: string; status: PresenceStatus; avatarUrl?: string; uniqueId: string; notifications: NotificationPrefs }
+type Stored = { name: string; status: PresenceStatus; avatarUrl?: string; uniqueId: string; shareActivity: boolean; notifications: NotificationPrefs }
 
 /** e.g. MMR-7K2Q-9XA4; no 0/O or 1/I, so it's easy to read out to a friend */
 function newUniqueId() {
@@ -33,7 +33,7 @@ function read(): Stored {
   } catch {
     // fall through to a fresh profile
   }
-  const fresh: Stored = { name: sessionName(), status: 'online', uniqueId: newUniqueId(), notifications: { messages: true, tags: true, friendRequests: true } }
+  const fresh: Stored = { name: sessionName(), status: 'online', uniqueId: newUniqueId(), shareActivity: true, notifications: { messages: true, tags: true, friendRequests: true } }
   write(fresh)
   return fresh
 }
@@ -45,6 +45,7 @@ function write(s: Stored) {
 const toProfile = (s: Stored): Profile => ({
   user: { ...me, name: s.name, status: s.status, avatarUrl: s.avatarUrl },
   uniqueId: s.uniqueId,
+  shareActivity: s.shareActivity ?? true,
   notifications: s.notifications,
 })
 
@@ -68,6 +69,7 @@ export const mockAccountService: AccountService = {
     const s = read()
     if (patch.name !== undefined && patch.name.trim()) s.name = patch.name.trim()
     if (patch.status) s.status = patch.status
+    if (patch.shareActivity !== undefined) s.shareActivity = patch.shareActivity
     if (patch.notifications) s.notifications = { ...s.notifications, ...patch.notifications }
     if (patch.avatar) s.avatarUrl = await shrink(patch.avatar)
     write(s)

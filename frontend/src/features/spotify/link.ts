@@ -7,8 +7,15 @@ type LinkStatus = { configured: boolean; linked: boolean; displayName: string | 
 
 export const linkStatus = () => api<LinkStatus>('/spotify/status')
 
-/** Off to Spotify's consent page; the backend brings the browser back with ?spotify=<result>. */
-export const connect = () => location.assign('/api/spotify/connect')
+/**
+ * Off to Spotify's consent page; the backend brings the browser back with ?spotify=<result>.
+ * The address is asked for first, because a plain navigation carries no sign-in of its own.
+ */
+export async function connect() {
+  const { url } = await api<{ url: string | null }>('/spotify/authorize-url')
+  if (url) location.assign(url)
+  return !!url
+}
 
 export const unlink = () => api('/spotify', { method: 'DELETE' })
 

@@ -168,6 +168,7 @@
 
 .details-toggle {
   position: absolute;
+  z-index: 9;
   top: calc(74px + env(safe-area-inset-top, 0px));
   right: calc(20px + env(safe-area-inset-right, 0px));
   display: grid;
@@ -180,13 +181,21 @@
   background: var(--surface);
   cursor: pointer;
   opacity: 0.85;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.18s ease, top 0.3s cubic-bezier(0.22, 0.9, 0.24, 1);
 }
 
-/* the chat panel covers this corner */
+/* With the chat panel open it moves up by a few pixels, to sit clear of the panel's top edge
+   (the sunlight button below it is behind the panel, so the globe hides that one). */
 .chat-open .details-toggle {
-  opacity: 0;
-  pointer-events: none;
+  top: calc(68px + env(safe-area-inset-top, 0px));
+}
+
+/* on small screens the panel covers the whole screen, and this button with it */
+@media (max-width: 760px) {
+  .chat-open .details-toggle {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 .details-toggle:hover,

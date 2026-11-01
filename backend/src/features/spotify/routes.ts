@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { config } from '../../config.ts'
 import { db } from '../../db/client.ts'
 import { spotifyLinks } from '../../db/schema.ts'
-import { newToken } from '../../lib/crypto.ts'
+import { decrypt, encrypt } from '../../lib/crypto.ts'
 import { parse } from '../../lib/errors.ts'
 import { requireAuth, userOf } from '../../lib/session.ts'
 import { linkAccount, SCOPES, spotifyApi } from './client.ts'
@@ -13,8 +13,24 @@ import { linkAccount, SCOPES, spotifyApi } from './client.ts'
 // which stores the tokens and returns to the app with ?spotify=linked (or denied / error / unavailable).
 // Playback: the web app's player calls /player and the control routes; the server adds the token.
 
-const STATE_COOKIE = 'memoir_spotify_state'
-const stateCookie = { httpOnly: true, sameSite: 'lax', secure: !config.dev, path: '/api/spotify', maxAge: 600 } as const
+/**
+ * Starting the link is a plain browser navigation to Spotify, which can carry no header and (once the
+ * app and the API are on different addresses) no cookie either. So who it's for travels in OAuth's own
+ * `state`, encrypted with TOKEN_KEY: the callback can read it, and nobody else can forge it.
+ */
+const STATE_TTL = 10 * 60 * 1000
+
+const makeState = (userId: string) => encrypt(JSON.stringify({ userId, until: Date.now() + STATE_TTL }))
+
+function readState(state: string | undefined) {
+  if (!state) return null
+  try {
+    const { userId, until } = JSON.parse(decrypt(state)) as { userId: string; until: number }
+    return until > Date.now() ? userId : null
+  } catch {
+    return null // tampered with, or from an older TOKEN_KEY
+  }
+}
 
 type ApiPlayer = {
   is_playing: boolean
@@ -61,32 +77,27 @@ export default async function spotifyRoutes(app: FastifyInstance) {
     return { configured: config.spotifyConfigured, linked: !!link, displayName: link?.displayName ?? null }
   })
 
-  /** Opened by the browser (a navigation, not fetch). */
-  app.get('/connect', async (req, reply) => {
-    if (!req.auth) return reply.redirect(config.appOrigin)
-    if (!config.spotifyConfigured) return backToApp(reply, 'unavailable')
-    const state = newToken()
-    reply.setCookie(STATE_COOKIE, state, stateCookie)
+  /** The app asks for this, then sends the browser to it. */
+  app.get('/authorize-url', { preHandler: requireAuth }, async (req) => {
+    if (!config.spotifyConfigured) return { url: null as string | null }
     const q = new URLSearchParams({
       response_type: 'code',
       client_id: config.SPOTIFY_CLIENT_ID!,
       scope: SCOPES.join(' '),
       redirect_uri: config.spotifyRedirectUri,
-      state,
+      state: makeState(userOf(req).id),
     })
-    return reply.redirect(`https://accounts.spotify.com/authorize?${q}`)
+    return { url: `https://accounts.spotify.com/authorize?${q}` }
   })
 
+  /** Where Spotify sends the browser back. No session here, so the state says who it was. */
   app.get('/callback', async (req, reply) => {
     const { code, state, error } = req.query as Record<string, string | undefined>
-    const expected = req.cookies[STATE_COOKIE]
-    reply.clearCookie(STATE_COOKIE, stateCookie)
-    if (!req.auth) return reply.redirect(config.appOrigin)
+    const userId = readState(state)
     if (error) return backToApp(reply, error === 'access_denied' ? 'denied' : 'error')
-    // the state proves this redirect answers a link request this browser started
-    if (!code || !state || !expected || state !== expected) return backToApp(reply, 'error')
+    if (!code || !userId) return backToApp(reply, 'error')
     try {
-      await linkAccount(userOf(req).id, code)
+      await linkAccount(userId, code)
     } catch (e) {
       req.log.warn(e, 'Spotify linking failed')
       return backToApp(reply, 'error')

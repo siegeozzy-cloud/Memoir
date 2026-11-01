@@ -1,9 +1,13 @@
 import type { User } from '../../shared/types'
 
-/** Who's signed in. The session itself is an httpOnly cookie that scripts can't read. */
+/**
+ * Who's signed in. The session is an httpOnly cookie when the app and the API share an address;
+ * otherwise sign-in hands back `token`, which the app keeps and sends with each call.
+ */
 export type Session = {
   user: User
   email: string
+  token?: string
 }
 
 export type SignInInput = { email: string; password: string; remember: boolean }
@@ -13,7 +17,10 @@ export type SignUpInput = { name: string; email: string; password: string; accep
  * Sign-up either signs straight in, or waits until the person opens the link emailed to them;
  * that link is what proves the address exists and is theirs.
  */
-export type SignUpResult = { status: 'signed-in'; session: Session } | { status: 'verify-email'; email: string }
+export type SignUpResult =
+  | { status: 'signed-in'; session: Session }
+  /** `delivery: 'console'` means the server has no mail set up and printed the link in its terminal. */
+  | { status: 'verify-email'; email: string; delivery?: 'email' | 'console' }
 
 /** A message to show on the form, e.g. "Wrong email or password". `field` points at the input it's about. */
 export class AuthError extends Error {

@@ -1,0 +1,190 @@
+/* Calls: a card while it's ringing, the other person's picture once it connects. */
+
+.call {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(6px);
+  animation: fade-in 0.2s ease both;
+}
+
+.call-card {
+  display: grid;
+  gap: 24px;
+  width: min(420px, 100%);
+  padding: 32px 28px 26px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  background: #121214;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  animation: call-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes call-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+}
+
+/* with video there's a picture to show, so the card grows and loses its padding */
+.call.is-live .call-card:has(.call-stage) {
+  width: min(880px, 100%);
+  padding: 0 0 18px;
+  overflow: hidden;
+  gap: 0;
+}
+
+.call-who {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.call-who h2 {
+  margin: 14px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.call-who p {
+  margin: 0;
+  font-size: 14.5px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.call-timer {
+  font: 500 13px/1 var(--mono);
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.call-stage {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: #05060a;
+}
+
+.call-remote {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #05060a;
+}
+
+.call-waiting {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+}
+
+.call-waiting p {
+  margin: 0;
+  font-size: 14.5px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.call-local {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 26%;
+  max-width: 190px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: #0b0d12;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+  /* your own picture mirrored, the way a mirror shows you */
+  transform: scaleX(-1);
+}
+
+.call-local.is-off {
+  visibility: hidden;
+}
+
+.call-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px 4px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.call-controls {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.call-btn {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.call-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.call-btn:active {
+  transform: scale(0.94);
+}
+
+/* muted or camera off: the button lights up to show it's doing something */
+.call-btn.is-on {
+  border-color: transparent;
+  background: #fff;
+  color: #101013;
+}
+
+.call-btn.is-hangup,
+.call-btn.is-accept {
+  width: 60px;
+  height: 60px;
+  border-color: transparent;
+}
+
+.call-btn.is-hangup {
+  background: #e5484d;
+}
+
+.call-btn.is-hangup:hover {
+  background: #f05a5f;
+}
+
+.call-btn.is-accept {
+  background: #30b964;
+}
+
+.call-btn.is-accept:hover {
+  background: #3ccf72;
+}
+
+@media (max-width: 560px) {
+  .call-card { padding: 24px 18px 20px; }
+  .call.is-live .call-card:has(.call-stage) { padding: 0 0 14px; }
+  .call-btn { width: 50px; height: 50px; }
+  .call-btn.is-hangup, .call-btn.is-accept { width: 56px; height: 56px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call, .call-card { animation: none; }
+}

@@ -18,7 +18,7 @@ export default function SignUpForm({ onSubmit, autoFocus }: Props) {
   const [agreed, setAgreed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<AuthError | null>(null)
-  const [sentTo, setSentTo] = useState<string | null>(null)
+  const [sent, setSent] = useState<{ email: string; delivery?: 'email' | 'console' } | null>(null)
   const strength = passwordStrength(password)
 
   // the server checks every field and answers with a message for the one that needs fixing
@@ -30,7 +30,7 @@ export default function SignUpForm({ onSubmit, autoFocus }: Props) {
     try {
       const result = await onSubmit({ name, email, password, acceptedTerms: agreed })
       if (result.status === 'verify-email') {
-        setSentTo(result.email)
+        setSent({ email: result.email, delivery: result.delivery })
         setBusy(false)
       }
       // signed in: this screen is on its way out, so the button stays busy
@@ -111,9 +111,11 @@ export default function SignUpForm({ onSubmit, autoFocus }: Props) {
           {error.message}
         </p>
       )}
-      {sentTo && (
+      {sent && (
         <p className="auth-note" role="status">
-          Check {sentTo} for a link to confirm your email, then sign in.
+          {sent.delivery === 'console'
+            ? 'No mail server is set up, so the confirmation link is printed in the backend’s terminal. Open it there, then sign in.'
+            : `Check ${sent.email} for a link to confirm your email, then sign in.`}
         </p>
       )}
       <button type="submit" className="auth-submit" disabled={busy}>

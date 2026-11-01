@@ -5,15 +5,22 @@ import type { User } from '../../../shared/types'
 import Avatar from '../../../shared/components/Avatar'
 import { AddPersonIcon, ChevronIcon, SearchIcon } from './icons'
 
-type Props = { chat: ChatApi; onAddFriend?: () => void }
+type Props = { chat: ChatApi; onAddFriend?: () => void; requestCount?: number }
 
-export default function PeopleBar({ chat, onAddFriend }: Props) {
+export default function PeopleBar({ chat, onAddFriend, requestCount = 0 }: Props) {
   return (
     <section className="people-bar" aria-label="People">
       <div className="people-top">
         <PeopleSearch chat={chat} />
-        <button type="button" className="icon-btn" aria-label="Add a friend" title="Add a friend" onClick={onAddFriend}>
+        <button
+          type="button"
+          className="icon-btn add-friend"
+          aria-label={requestCount ? `Add a friend, ${requestCount} request${requestCount > 1 ? 's' : ''} waiting` : 'Add a friend'}
+          title="Add a friend"
+          onClick={onAddFriend}
+        >
           <AddPersonIcon />
+          {requestCount > 0 && <span className="unread-badge">{requestCount > 9 ? '9+' : requestCount}</span>}
         </button>
       </div>
       <PeopleCarousel chat={chat} />

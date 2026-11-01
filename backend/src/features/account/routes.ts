@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { db } from '../../db/client.ts'
 import { users } from '../../db/schema.ts'
 import { HttpError, parse } from '../../lib/errors.ts'
+import { announcePresence } from '../../lib/realtime.ts'
 import { endAllSessions, requireAuth, userOf } from '../../lib/session.ts'
 import { nameSchema, statusSchema } from '../../lib/validation.ts'
 import { profileOf } from '../auth/users.ts'
@@ -13,9 +14,10 @@ const Patch = z.strictObject(
   {
     name: nameSchema.optional(),
     status: statusSchema.optional(),
+    shareActivity: z.boolean().optional(),
     notifications: z.strictObject({ messages: z.boolean().optional(), tags: z.boolean().optional(), friendRequests: z.boolean().optional() }).optional(),
   },
-  'Only name, status and notifications can be changed here.',
+  'Only your name, status, activity sharing and notifications can be changed here.',
 )
 
 export default async function accountRoutes(app: FastifyInstance) {
@@ -30,6 +32,7 @@ export default async function accountRoutes(app: FastifyInstance) {
       .set({
         name: p.name,
         status: p.status,
+        shareActivity: p.shareActivity,
         notifyMessages: p.notifications?.messages,
         notifyTags: p.notifications?.tags,
         notifyFriendRequests: p.notifications?.friendRequests,
@@ -37,6 +40,8 @@ export default async function accountRoutes(app: FastifyInstance) {
       })
       .where(eq(users.id, userOf(req).id))
       .returning()
+    // friends see the new status, name or what you're playing straight away
+    void announcePresence(user.id)
     return profileOf(user)
   })
 
@@ -44,7 +49,7 @@ export default async function accountRoutes(app: FastifyInstance) {
   app.put('/avatar', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
     const part = await req.file()
     if (!part) throw new HttpError(400, 'invalid', 'Choose a picture to upload.', 'avatar')
-    const file = await saveAvatar(userOf(req).id, await part.toBuffer())
+    const file = await saveAvatar(await part.toBuffer())
     const before = userOf(req).avatarFile
     const [user] = await db.update(users).set({ avatarFile: file, updatedAt: new Date() }).where(eq(users.id, userOf(req).id)).returning()
     await deleteAvatar(before)

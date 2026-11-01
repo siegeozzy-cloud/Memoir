@@ -3,6 +3,11 @@ import { useProfile } from '../features/account/useProfile'
 import type { SignInInput, SignUpInput } from '../features/auth/service'
 import { useAuth } from '../features/auth/useAuth'
 import { useChat } from '../features/chat/useChat'
+import CallOverlay from '../features/calls/components/CallOverlay'
+import { useCall } from '../features/calls/useCall'
+import AddFriendDialog from '../features/friends/components/AddFriendDialog'
+import { friendsApi } from '../features/friends/service'
+import { useFriends } from '../features/friends/useFriends'
 import AuthScreen from '../features/auth/components/AuthScreen'
 import { SHOWCASE_PIN } from '../features/auth/components/porthole'
 import CapturesPanel, { type CapturesView } from '../features/memories/components/CapturesPanel'
@@ -18,14 +23,15 @@ import LyricsPanel from '../features/spotify/components/LyricsPanel'
 import NowPlaying from '../features/spotify/components/NowPlaying'
 import '../features/spotify/components/spotify.css'
 import { GLOBE_ROTATION, NOTIFICATION_MS } from './config'
-import { accountService, authService, chatService, memoryService } from './services'
+import { closeSocket, onChannel, openSocket } from '../shared/lib/socket'
+import { accountService, authService, chatServiceFor, memoryServiceFor, mockMode } from './services'
 import { users } from '../mocks/people'
 import { useMediaQuery } from '../shared/hooks/useMediaQuery'
 import type { LatLon } from '../shared/lib/places'
 import { useSpotify } from '../features/spotify/useSpotify'
 import { useNotifications } from '../features/home/useNotifications'
 import { useMemories } from '../features/memories/useMemories'
-import type { Memory } from '../shared/types'
+import type { Memory, User } from '../shared/types'
 import './App.css'
 
 const DETAILS_KEY = 'memoir.globe.details'
@@ -45,7 +51,10 @@ const NO_MEMORIES: Memory[] = []
 
 export default function App() {
   const auth = useAuth(authService)
-  const profileApi = useProfile(accountService, !!auth.session)
+  const signedIn = !!auth.session
+  const meId = auth.session?.user.id ?? ''
+  const profileApi = useProfile(accountService, signedIn)
+  const requests = useFriends(signedIn && !mockMode)
   const [entry, setEntry] = useState<'entering' | 'arriving' | null>(null)
   const phase: Phase = auth.session === undefined ? 'checking' : !auth.session ? 'auth' : (entry ?? 'home')
   const atHome = phase === 'arriving' || phase === 'home'
@@ -58,9 +67,12 @@ export default function App() {
   const [onMap, setOnMap] = useState(false)
   const [focus, setFocus] = useState<GlobeFocus | null>(null)
   const { current: notification, push: notify, next: nextNotification } = useNotifications()
-  const spotify = useSpotify(!!auth.session)
-  const chat = useChat(chatService)
-  const memories = useMemories(memoryService)
+  const spotify = useSpotify(signedIn)
+  // rebuilt when the signed-in person changes, so nothing of theirs is left over
+  const chat = useChat(useMemo(() => chatServiceFor(meId), [meId]))
+  const memories = useMemories(useMemo(() => memoryServiceFor(meId), [meId]))
+  const call = useCall(signedIn && !mockMode)
+  const [addingFriend, setAddingFriend] = useState(false)
   const bottomRef = useRef<HTMLElement>(null)
   const capturesRef = useRef<HTMLElement>(null)
   const [stageBottom, setStageBottom] = useState<number>()
@@ -78,6 +90,24 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(DETAILS_KEY, details ? 'on' : 'off')
   }, [details])
+
+  // the live connection: new messages, presence, friend requests and calls
+  useEffect(() => {
+    if (!signedIn || mockMode) return
+    openSocket()
+    return closeSocket
+  }, [signedIn])
+
+  // pop-up notifications pushed by the server (Do not disturb and the switches are applied there)
+  useEffect(() => {
+    if (!signedIn || mockMode) return
+    const handle = (push: { event?: unknown }) => {
+      const event = push.event as { type?: string; from?: User; message?: string } | undefined
+      if (event?.type === 'notification' && event.from && event.message) notify({ from: event.from, message: event.message })
+    }
+    const offs = ['chat', 'memories', 'friends'].map((channel) => onChannel(channel, handle as (push: { channel: string }) => void))
+    return () => offs.forEach((off) => off())
+  }, [signedIn, notify])
 
   useEffect(() => {
     if (phase !== 'entering' && phase !== 'arriving') return
@@ -262,10 +292,10 @@ export default function App() {
           chat={chat}
           memories={memories.visible}
           onShowMemory={(m) => setViewingId(m.id)}
-          // TODO: voice/video calls over WebRTC (STUN, TURN fallback)
-          onCall={() => {}}
-          // TODO: friend requests
-          onAddFriend={() => {}}
+          onCall={(kind) => chat.other && call.start(chat.other, kind)}
+          onAddFriend={() => setAddingFriend(true)}
+          requestCount={requests.incoming.length}
+          onRemoveFriend={(userId) => void friendsApi.unfriend(userId)}
         />
 
         {viewing && (
@@ -281,6 +311,14 @@ export default function App() {
           />
         )}
       </div>
+
+      {addingFriend && <AddFriendDialog myUniqueId={profileApi.profile?.uniqueId} requests={requests} people={friends} onClose={() => setAddingFriend(false)} />}
+      <CallOverlay call={call} />
+      {call.notice && (
+        <p className="sp-toast" role="status">
+          {call.notice}
+        </p>
+      )}
     </main>
   )
 }

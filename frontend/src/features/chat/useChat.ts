@@ -6,6 +6,14 @@ import type { Conversation, ConversationSettings, Message, MessageDraft } from '
 
 const byActivity = (a: Conversation, b: Conversation) => b.lastActivityAt.localeCompare(a.lastActivityAt)
 
+/** Adds a message, or replaces the one with the same id, keeping the list in time order. */
+function upsertMessage(list: Message[], message: Message) {
+  const without = list.filter((m) => m.id !== message.id)
+  const at = without.findIndex((m) => m.createdAt > message.createdAt)
+  if (at < 0) return [...without, message]
+  return [...without.slice(0, at), message, ...without.slice(at)]
+}
+
 /** Chat state for the UI, kept in sync with a ChatService. */
 export function useChat(service: ChatService) {
   const [users, setUsers] = useState<Record<string, User>>({ [me.id]: me })
@@ -21,6 +29,12 @@ export function useChat(service: ChatService) {
   const upsertConversation = useCallback((c: Conversation) => {
     setConversations((list) => [...list.filter((x) => x.id !== c.id), c].sort(byActivity))
   }, [])
+
+  const loadFriends = useCallback(async () => {
+    const friends = await service.listFriends()
+    addUsers(friends)
+    setFriendIds(friends.map((f) => f.id))
+  }, [service, addUsers])
 
   // initial load; opens the most recent conversation
   useEffect(() => {
@@ -47,13 +61,24 @@ export function useChat(service: ChatService) {
           setConversations((list) => list.filter((c) => c.id !== e.conversationId))
           setMessages(({ [e.conversationId]: _gone, ...rest }) => rest)
           setActiveId((cur) => (cur === e.conversationId ? null : cur))
+        } else if (e.type === 'message') {
+          setMessages((m) => (m[e.message.conversationId] ? { ...m, [e.message.conversationId]: upsertMessage(m[e.message.conversationId], e.message) } : m))
         } else if (e.type === 'message-deleted') {
           setMessages((m) => (m[e.conversationId] ? { ...m, [e.conversationId]: m[e.conversationId].filter((x) => x.id !== e.messageId) } : m))
-        } else if (e.type === 'message') {
-          setMessages((m) => (m[e.message.conversationId] ? { ...m, [e.message.conversationId]: [...m[e.message.conversationId], e.message] } : m))
+        } else if (e.type === 'read') {
+          // they've opened the conversation: everything of mine up to then is "Seen"
+          setMessages((m) =>
+            m[e.conversationId]
+              ? { ...m, [e.conversationId]: m[e.conversationId].map((x) => (x.senderId === service.meId && x.createdAt <= e.at ? { ...x, status: 'read' } : x)) }
+              : m,
+          )
         } else if (e.type === 'presence') addUsers([e.user])
+        else if (e.type === 'hello') {
+          addUsers(e.friends)
+          setFriendIds(e.friends.map((f) => f.id))
+        } else if (e.type === 'friends-changed') void loadFriends()
       }),
-    [service, upsertConversation, addUsers],
+    [service, upsertConversation, addUsers, loadFriends],
   )
 
   // load messages for the open conversation and mark it read
@@ -106,7 +131,7 @@ export function useChat(service: ChatService) {
       put((list) => [...list, temp])
       try {
         const stored = await service.sendMessage(conversationId, draft)
-        put((list) => list.map((x) => (x.id === temp.id ? stored : x)))
+        put((list) => upsertMessage(list.filter((x) => x.id !== temp.id), stored))
         previews.forEach((u) => URL.revokeObjectURL(u))
       } catch {
         put((list) => list.map((x) => (x.id === temp.id ? { ...x, status: 'failed' } : x)))
@@ -121,7 +146,7 @@ export function useChat(service: ChatService) {
       const c = await service.openConversationWith(to.id)
       upsertConversation(c)
       const stored = await service.forwardMessage(message.id, c.id)
-      setMessages((m) => (m[c.id] ? { ...m, [c.id]: [...m[c.id], stored] } : m))
+      setMessages((m) => (m[c.id] ? { ...m, [c.id]: upsertMessage(m[c.id], stored) } : m))
     },
     [service, upsertConversation],
   )
@@ -144,6 +169,7 @@ export function useChat(service: ChatService) {
     [activeId, service, upsertConversation],
   )
 
+  const markRead = useCallback((conversationId: string) => service.markRead(conversationId), [service])
   const remove = useCallback((conversationId: string) => service.deleteConversation(conversationId), [service])
   const search = useCallback((query: string) => service.searchUsers(query), [service])
 
@@ -174,7 +200,9 @@ export function useChat(service: ChatService) {
     forward,
     deleteMessage,
     updateSettings,
+    markRead,
     remove,
+    reloadFriends: loadFriends,
   }
 }
 

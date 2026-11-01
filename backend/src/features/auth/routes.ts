@@ -22,6 +22,9 @@ const SignUp = z.object({
 const SignIn = z.object({ email: emailSchema, password: z.string('Enter your password.').min(1, 'Enter your password.').max(128), remember: z.boolean().default(false) })
 const Resend = z.object({ email: emailSchema })
 
+/** Without a mail server the link is printed in the backend's terminal, so say so rather than "check your inbox". */
+const delivery = () => (config.SMTP_URL ? 'email' : ('console' as const))
+
 const VERIFY_TTL = 24 * 60 * 60 * 1000
 const RESEND_AFTER = 2 * 60 * 1000 // don't email a new link more often than this
 const strict = (max: number) => ({ config: { rateLimit: { max, timeWindow: '1 minute' } } })
@@ -43,7 +46,7 @@ async function sendVerification(user: UserRow, force = false) {
     await tx.delete(emailTokens).where(and(eq(emailTokens.userId, user.id), eq(emailTokens.purpose, 'verify')))
     await tx.insert(emailTokens).values({ id: hashToken(token), userId: user.id, purpose: 'verify', expiresAt: new Date(Date.now() + VERIFY_TTL) })
   })
-  await sendMail(verifyEmail(user.email, user.name, `${config.appOrigin}/api/auth/verify?token=${token}`))
+  await sendMail(verifyEmail(user.email, user.name, `${config.apiOrigin}/api/auth/verify?token=${token}`))
 }
 
 async function insertUser(values: Omit<typeof users.$inferInsert, 'uniqueId'>) {
@@ -87,7 +90,7 @@ export default async function authRoutes(app: FastifyInstance) {
         if (!isUniqueViolation(e, 'users_email_key')) throw e // signed up twice at once: the first one stands
       }
     }
-    return reply.code(202).send({ status: 'verify-email', email: input.email })
+    return reply.code(202).send({ status: 'verify-email', email: input.email, delivery: delivery() })
   })
 
   /** The link in the confirmation email. Lands back on the sign-in screen with the result. */
@@ -112,7 +115,7 @@ export default async function authRoutes(app: FastifyInstance) {
     const { email } = parse(Resend, req.body)
     const user = await db.query.users.findFirst({ where: eq(users.email, email) })
     if (user && !user.emailVerifiedAt) await sendVerification(user)
-    return reply.code(202).send({ status: 'verify-email', email })
+    return reply.code(202).send({ status: 'verify-email', email, delivery: delivery() })
   })
 
   app.post('/signin', strict(10), async (req, reply) => {
@@ -122,15 +125,17 @@ export default async function authRoutes(app: FastifyInstance) {
     if (!user || !ok) throw new HttpError(401, 'wrong-credentials', 'Wrong email or password.')
     if (!user.emailVerifiedAt) {
       await sendVerification(user)
-      throw new HttpError(403, 'email-unverified', `Confirm your email first. We sent a link to ${user.email}.`, 'email')
+      const where = delivery() === 'console' ? 'The link is printed in the backend’s terminal (no mail server is set up).' : `We sent a link to ${user.email}.`
+      throw new HttpError(403, 'email-unverified', `Confirm your email first. ${where}`, 'email')
     }
     let current = user
     if (user.deactivatedAt) {
       // signing in again brings a deactivated account back
       ;[current] = await db.update(users).set({ deactivatedAt: null, updatedAt: new Date() }).where(eq(users.id, user.id)).returning()
     }
-    await startSession(reply, current.id, input.remember)
-    return sessionOf(current)
+    const token = await startSession(reply, current.id, input.remember)
+    // the cookie is enough when the app and the API share an address; the token is for when they don't
+    return { ...sessionOf(current), token }
   })
 
   app.post('/signout', async (req, reply) => {

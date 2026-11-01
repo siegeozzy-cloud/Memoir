@@ -2,16 +2,20 @@
 
 .profile {
   position: absolute;
-  z-index: 7;
+  /* above the chat panel (8): the button sits in the strip over it, and the card opens across it */
+  z-index: 9;
   top: calc(20px + env(safe-area-inset-top, 0px));
   right: calc(20px + env(safe-area-inset-right, 0px));
   transition: opacity 0.18s ease;
 }
 
-/* the chat panel covers this corner */
-.chat-open .profile {
-  opacity: 0;
-  pointer-events: none;
+/* the chat panel starts below this button, so it stays. On small screens the panel covers the
+   whole screen, and the button with it. */
+@media (max-width: 760px) {
+  .chat-open .profile {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 .profile-btn {
@@ -428,6 +432,10 @@
   cursor: default;
 }
 
+.pf-after {
+  margin-top: 8px;
+}
+
 .pf-note {
   margin: 8px 2px 0;
   font-size: 12px;
@@ -494,8 +502,43 @@
   gap: 8px;
 }
 
-/* phones: the button joins the eye and sunlight buttons at the bottom right; the card is a bottom sheet */
-@media (max-width: 560px) {
+/* short windows (small laptops, a half-height browser): the same card, tightened so it still fits */
+@media (max-height: 900px) and (min-width: 561px) {
+  .profile-card {
+    gap: 12px;
+    padding: 16px;
+    max-height: calc(100dvh - 76px - env(safe-area-inset-top, 0px));
+  }
+  .pf-id {
+    padding: 7px 7px 7px 12px;
+  }
+  .pf-section h3 {
+    margin-bottom: 7px;
+  }
+  .pf-status-opt {
+    padding: 8px 11px;
+  }
+  /* the hint under each status; the names say enough when space is short */
+  .pf-status-opt small {
+    display: none;
+  }
+  .pf-spotify {
+    padding: 9px 9px 9px 12px;
+  }
+  .pf-row {
+    min-height: 38px;
+  }
+  .pf-name {
+    font-size: 17px;
+  }
+  .pf-avatar-btn .avatar {
+    width: 54px !important;
+    height: 54px !important;
+  }
+}
+
+/* phones, and anything too short for the card: a sheet that slides up from the bottom edge */
+@media (max-width: 560px), (max-height: 640px) {
   .profile {
     top: auto;
     bottom: calc(141px + env(safe-area-inset-bottom, 0px));

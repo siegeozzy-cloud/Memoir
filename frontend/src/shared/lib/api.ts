@@ -1,5 +1,16 @@
-// Calls to the Memoir backend (../backend), under /api on the same origin.
-// The session is an httpOnly cookie the browser sends by itself; this code never sees it.
+// Calls to the Memoir backend (../backend).
+//
+// In development the app and the API share an address (Vite proxies /api), and the session is an
+// httpOnly cookie the browser sends by itself. Once they're on different addresses, VITE_API_URL points
+// here and the session token is sent instead, because a browser won't carry that cookie between sites.
+
+import { clearToken, sessionToken } from './session-token'
+
+/** Empty in development: /api goes through the dev server's proxy. */
+const base = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+
+/** Where the API lives, for the WebSocket and for links out to it (Spotify's sign-in). */
+export const apiUrl = (path: string) => `${base}/api${path}`
 
 /** The backend's error: `message` is written to be shown as is; `field` names the form input it's about. */
 export class ApiError extends Error {
@@ -19,17 +30,24 @@ export class ApiError extends Error {
 type Options = { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; json?: unknown; form?: FormData }
 
 export async function api<T = unknown>(path: string, { method = 'GET', json, form }: Options = {}): Promise<T> {
+  const token = sessionToken()
+  const headers: Record<string, string> = {}
+  if (json !== undefined) headers['Content-Type'] = 'application/json'
+  if (token) headers.Authorization = `Bearer ${token}`
+
   let r: Response
   try {
-    r = await fetch(`/api${path}`, {
+    r = await fetch(apiUrl(path), {
       method,
-      credentials: 'same-origin',
-      headers: json !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      credentials: base ? 'include' : 'same-origin',
+      headers,
       body: json !== undefined ? JSON.stringify(json) : form,
     })
   } catch {
     throw new ApiError(0, 'offline', 'Can’t reach Memoir. Check your connection and try again.')
   }
+  // the session has gone (expired, or signed out elsewhere): stop sending the old token
+  if (r.status === 401 && token) clearToken()
   if (r.status === 204) return undefined as T
   const body = await r.json().catch(() => null)
   if (!r.ok) {

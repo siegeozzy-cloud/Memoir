@@ -1,4 +1,5 @@
 import { api, ApiError } from '../../shared/lib/api'
+import { clearToken, keepToken } from '../../shared/lib/session-token'
 import { AuthError, type AuthService, type Session, type SignUpResult } from './service'
 
 // The real accounts backend (../backend, /api/auth).
@@ -20,7 +21,14 @@ export const httpAuthService: AuthService = {
   async restore() {
     return (await api<{ session: Session | null }>('/auth/session')).session
   },
-  signIn: (input) => asAuthError(api<Session>('/auth/signin', { method: 'POST', json: input })),
+  async signIn(input) {
+    const session = await asAuthError(api<Session>('/auth/signin', { method: 'POST', json: input }))
+    keepToken(session.token, input.remember)
+    return session
+  },
   signUp: (input) => asAuthError(api<SignUpResult>('/auth/signup', { method: 'POST', json: input })),
-  signOut: () => api('/auth/signout', { method: 'POST' }),
+  async signOut() {
+    await api('/auth/signout', { method: 'POST' }).catch(() => {}) // sign out locally even if the server is unreachable
+    clearToken()
+  },
 }

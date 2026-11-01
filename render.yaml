@@ -1,0 +1,43 @@
+# Render reads this when you create a Blueprint from the repository.
+# The secrets (sync: false) are filled in once, in Render's dashboard.
+services:
+  - type: web
+    name: memoir-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      # the web app's address, and this service's own; both are used for links and for CORS
+      - key: APP_URL
+        value: https://memoir-album.vercel.app
+      - key: API_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: TOKEN_KEY
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: SMTP_URL
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: TURN_URL
+        sync: false
+      - key: TURN_SECRET
+        sync: false
+      - key: EXTRA_ORIGINS
+        sync: false

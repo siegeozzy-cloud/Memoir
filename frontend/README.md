@@ -12,10 +12,15 @@ npm run dev
 
 Open <http://127.0.0.1:5173>. (The dev server is pinned to that address for Spotify sign-in; see below.)
 
-Sign-in, sign-up, the profile and Spotify linking talk to the backend ([../backend](../backend/README.md)); start it first.
-Messages and posts still run on in-browser mock data until their backend parts exist. Each feature has a `service.ts`
-(what the app needs from the server); `httpService.ts` talks to the backend and `mockService.ts` stands in without it.
-`src/app/services.ts` picks which one each feature uses, and `VITE_API=mock` in `.env.local` runs the whole app without the backend.
+Everything talks to the backend ([../backend](../backend/README.md)), so start that first. In production
+the API is somewhere else entirely: set `VITE_API_URL` (Vercel does this at build time) and the app signs
+in with a token instead of a cookie, because browsers won't share a cookie between two different sites. Each feature has a
+`service.ts` (what the app needs from the server); `httpService.ts` talks to the backend and `mockService.ts` stands in
+without it. `src/app/services.ts` picks which one each feature uses, and `VITE_API=mock` in `.env.local` runs the app on
+in-browser mock data (no friends, live updates or calls).
+
+A WebSocket (`src/shared/lib/socket.ts`) carries everything that arrives without being asked for: new messages,
+who's online and what they're playing, friend requests, posts you're tagged in, and call setup.
 
 ## Folders
 
@@ -26,6 +31,8 @@ src/
     auth/       Sign in / sign up, the porthole screen
     account/    Profile: picture, name, status, notifications, unique ID, deactivate/delete
     chat/       Messages: conversations, hover actions, forwarding
+    friends/    Finding people by name or unique ID, requests
+    calls/      Voice and video calls (WebRTC)
     memories/   Posts and albums: Logged Captures, upload/edit, viewer, Recently Deleted
     spotify/    Now playing, controls, lyrics
     globe/      GlobeView: the bridge to the 3D globe page

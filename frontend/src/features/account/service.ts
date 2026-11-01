@@ -7,6 +7,8 @@ export type Profile = {
   user: User
   /** Permanent and public: friends can find you by it. */
   uniqueId: string
+  /** Let friends see what you're playing on Spotify. */
+  shareActivity: boolean
   notifications: NotificationPrefs
 }
 
@@ -14,6 +16,7 @@ export type Profile = {
 export type ProfilePatch = {
   name?: string
   status?: PresenceStatus
+  shareActivity?: boolean
   /** A new profile picture. */
   avatar?: File
   notifications?: Partial<NotificationPrefs>

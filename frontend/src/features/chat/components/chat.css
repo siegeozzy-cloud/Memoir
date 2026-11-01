@@ -1103,6 +1103,21 @@
   color: var(--soft);
 }
 
+.info-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.delete-link.is-quiet {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.delete-link.is-quiet:hover {
+  color: #fff;
+}
+
 .delete-link {
   padding: 6px 0;
   border: 0;

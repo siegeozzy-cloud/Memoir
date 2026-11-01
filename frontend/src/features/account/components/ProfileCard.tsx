@@ -79,6 +79,12 @@ export default function ProfileCard({ profile, update, email, spotify, onSignOut
       <section className="pf-section">
         <h3>Spotify</h3>
         <SpotifyRow spotify={spotify} />
+        <div className="pf-card pf-after">
+          <label className="pf-row">
+            <span>Show friends what I’m playing</span>
+            <input type="checkbox" role="switch" className="pf-switch" checked={profile.shareActivity} onChange={(e) => quietly({ shareActivity: e.target.checked })} />
+          </label>
+        </div>
       </section>
 
       <section className="pf-section">

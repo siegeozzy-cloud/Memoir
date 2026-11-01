@@ -43,7 +43,8 @@ test('sign-up checks every field, with messages for people', async () => {
   // names from any language, with apostrophes and hyphens, are fine
   const ok = await json('POST', '/api/auth/signup', { name: "  José   O'Brien-Nguyễn ", email, password, acceptedTerms: true })
   assert.equal(ok.statusCode, 202)
-  assert.deepEqual(ok.json(), { status: 'verify-email', email })
+  // no mail server in tests, so the link would be printed in the terminal
+  assert.deepEqual(ok.json(), { status: 'verify-email', email, delivery: 'console' })
   assert.match(testOutbox.at(-1)!.subject, /Confirm your email/)
 })
 
@@ -96,6 +97,37 @@ test('sign-in sets an httpOnly session cookie and returns the session', async ()
   assert.equal(s.json().session.email, email)
 })
 
+test('the same session works as a token, for apps that can’t use the cookie', async () => {
+  const signin = await json('POST', '/api/auth/signin', { email, password, remember: true })
+  const token = signin.json().token as string
+  assert.ok(token?.length > 20, 'sign-in hands back a token')
+
+  // no cookie at all, just the token
+  const bearer = { origin: ORIGIN, authorization: `Bearer ${token}` }
+  const mine = await app.inject({ method: 'GET', url: '/api/account', headers: bearer })
+  assert.equal(mine.statusCode, 200)
+  assert.equal(mine.json().user.name, "José O'Brien-Nguyễn")
+
+  // the WebSocket carries it in the sub-protocol, where a browser can set it
+  const upgrade = await app.inject({
+    method: 'GET',
+    url: '/api/ws',
+    headers: { origin: ORIGIN, connection: 'upgrade', upgrade: 'websocket', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', 'sec-websocket-protocol': `memoir.v1, memoir.token.${token}` },
+  })
+  assert.notEqual(upgrade.statusCode, 401, 'the token in the sub-protocol signs the socket in')
+
+  const nonsense = await app.inject({ method: 'GET', url: '/api/account', headers: { origin: ORIGIN, authorization: 'Bearer not-a-real-token' } })
+  assert.equal(nonsense.statusCode, 401)
+})
+
+test('another site may not call the API', async () => {
+  const r = await app.inject({ method: 'GET', url: '/api/account', headers: { origin: 'https://evil.example', cookie } })
+  // the browser is told no, so its script never sees the answer
+  assert.ok(!r.headers['access-control-allow-origin'])
+  const allowed = await app.inject({ method: 'GET', url: '/api/account', headers: { origin: ORIGIN, cookie } })
+  assert.equal(allowed.headers['access-control-allow-origin'], ORIGIN)
+})
+
 test('profile: read and change name, status and notifications', async () => {
   const p = (await json('GET', '/api/account')).json()
   assert.match(p.uniqueId, /^MMR-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
@@ -145,10 +177,20 @@ test('changes from another site are refused', async () => {
 test('Spotify: status, and linking when no Spotify app is set up', async () => {
   const s = await json('GET', '/api/spotify/status')
   assert.equal(s.json().linked, false)
-  const c = await json('GET', '/api/spotify/connect')
-  assert.equal(c.statusCode, 302)
-  if (!s.json().configured) assert.equal(c.headers.location, `${ORIGIN}/?spotify=unavailable`)
-  else assert.match(String(c.headers.location), /^https:\/\/accounts\.spotify\.com\/authorize\?/)
+  const c = await json('GET', '/api/spotify/authorize-url')
+  assert.equal(c.statusCode, 200)
+  if (!s.json().configured) assert.equal(c.json().url, null, 'no Spotify app set up, so nowhere to send them')
+  else {
+    const url = new URL(c.json().url)
+    assert.equal(url.origin + url.pathname, 'https://accounts.spotify.com/authorize')
+    // who the link is for travels encrypted in `state`, since the callback has no session of its own
+    assert.ok(url.searchParams.get('state')?.startsWith('v1.'))
+    assert.match(String(url.searchParams.get('redirect_uri')), /\/api\/spotify\/callback$/)
+  }
+  // a made-up state links nobody
+  const forged = await app.inject({ method: 'GET', url: '/api/spotify/callback?code=x&state=not-a-real-state' })
+  assert.equal(forged.statusCode, 302)
+  assert.equal(forged.headers.location, `${ORIGIN}/?spotify=error`)
   const player = await json('GET', '/api/spotify/player')
   assert.equal(player.json().error.code, 'spotify-unlinked')
 })

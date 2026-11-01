@@ -5,7 +5,14 @@ import pg from 'pg'
 import { config } from '../config.ts'
 import * as schema from './schema.ts'
 
-export const pool = new pg.Pool({ connectionString: config.DATABASE_URL, max: 10 })
+/**
+ * Hosted databases (Neon, Render, Supabase) require TLS and say so in the connection string.
+ * `sslmode=no-verify` is the escape hatch for a server with a self-signed certificate.
+ */
+const sslMode = /[?&]sslmode=([^&]+)/.exec(config.DATABASE_URL)?.[1]
+const ssl = !sslMode || sslMode === 'disable' ? false : { rejectUnauthorized: sslMode !== 'no-verify' }
+
+export const pool = new pg.Pool({ connectionString: config.DATABASE_URL, max: 10, ssl })
 export const db = drizzle(pool, { schema, casing: 'snake_case' })
 
 /** Applies any SQL migrations in src/db/migrations that haven't run yet. */

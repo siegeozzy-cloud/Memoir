@@ -125,7 +125,7 @@ export function useSpotify(signedIn: boolean) {
       ),
     connect: () => {
       localStorage.removeItem(MODE)
-      connect()
+      connect().catch(() => setNotice('Couldn’t reach Spotify. Try again.'))
     },
     startDemo: () => {
       localStorage.setItem(MODE, 'demo')

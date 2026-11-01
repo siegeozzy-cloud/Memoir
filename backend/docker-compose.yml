@@ -16,5 +16,31 @@ services:
       timeout: 3s
       retries: 20
 
+  # TURN relay for voice and video calls, used when two devices can't reach each other directly.
+  # Started with `npm run turn:up`; not needed for anything else.
+  # Ports are published rather than host-networked, which Docker Desktop on macOS doesn't pass through.
+  turn:
+    image: coturn/coturn:4.6-alpine
+    profiles: [turn]
+    ports:
+      - "127.0.0.1:3478:3478/udp"
+      - "127.0.0.1:3478:3478/tcp"
+      - "127.0.0.1:49160-49179:49160-49179/udp"
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-port=3478
+      - --realm=memoir.local
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET:?set TURN_SECRET in backend/.env}
+      - --min-port=49160
+      - --max-port=49179
+      # relay addresses are handed out as 127.0.0.1, where the published ports are
+      - --external-ip=127.0.0.1
+      - --no-tls
+      - --no-dtls
+      - --no-multicast-peers
+      - --no-cli
+
 volumes:
   pgdata:

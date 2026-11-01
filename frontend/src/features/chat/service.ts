@@ -8,10 +8,16 @@ export type ChatEvent =
   | { type: 'conversation-deleted'; conversationId: string }
   | { type: 'message-deleted'; conversationId: string; messageId: string }
   | { type: 'presence'; user: User }
+  /** Everyone's presence at once, when the connection opens. */
+  | { type: 'hello'; friends: User[] }
+  /** They've seen everything up to `at`: your messages before it show "Seen". */
+  | { type: 'read'; conversationId: string; userId: string; at: string }
+  /** Someone accepted, added or removed you: the friends list needs reloading. */
+  | { type: 'friends-changed' }
 
 /**
- * Everything the chat UI needs from a backend. The UI only talks to this interface;
- * `mockChatService` implements it in memory until the real server exists.
+ * Everything the chat UI needs from a backend: `makeHttpChatService` talks to ../backend,
+ * `mockChatService` stands in without it.
  */
 export interface ChatService {
   readonly meId: string

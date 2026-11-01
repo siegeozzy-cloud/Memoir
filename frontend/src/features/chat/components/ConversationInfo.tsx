@@ -16,10 +16,12 @@ type Props = {
   onJumpTo: (messageId: string) => void
   onShowMemory: (memory: Memory) => void
   onDelete: () => void
+  /** Stop being friends. The conversation stays; they leave your people bar. */
+  onRemoveFriend?: () => void
 }
 
 // Messenger-style "chat info": customise, search, shared media, tagged posts, delete.
-export default function ConversationInfo({ conversation, other, meId, messages = [], memories, onChange, onJumpTo, onShowMemory, onDelete }: Props) {
+export default function ConversationInfo({ conversation, other, meId, messages = [], memories, onChange, onJumpTo, onShowMemory, onDelete, onRemoveFriend }: Props) {
   const { settings } = conversation
   const media = useMemo(
     () => messages.flatMap((m) => m.attachments.map((a) => ({ a, messageId: m.id }))).reverse(),
@@ -129,7 +131,7 @@ export default function ConversationInfo({ conversation, other, meId, messages =
         )}
       </section>
 
-      <DeleteSection name={settings.nickname || other.name} onDelete={onDelete} />
+      <DeleteSection name={settings.nickname || other.name} onDelete={onDelete} onRemoveFriend={onRemoveFriend} />
     </div>
   )
 }
@@ -220,26 +222,38 @@ function Highlight({ text, needle }: { text: string; needle: string }) {
   )
 }
 
-function DeleteSection({ name, onDelete }: { name: string; onDelete: () => void }) {
-  const [confirming, setConfirming] = useState(false)
+function DeleteSection({ name, onDelete, onRemoveFriend }: { name: string; onDelete: () => void; onRemoveFriend?: () => void }) {
+  const [confirming, setConfirming] = useState<'delete' | 'unfriend' | null>(null)
+  const unfriending = confirming === 'unfriend'
   return (
     <section className="info-section">
       {confirming ? (
-        <div className="info-card delete-confirm" role="alertdialog" aria-label="Delete conversation">
-          <p>Delete your conversation with {name}? This removes all messages and shared contents for you.</p>
+        <div className="info-card delete-confirm" role="alertdialog" aria-label={unfriending ? 'Remove friend' : 'Delete conversation'}>
+          <p>
+            {unfriending
+              ? `Remove ${name} from your friends? They leave your people bar, and neither of you can start a new conversation or call until you're friends again. Your messages stay.`
+              : `Delete your conversation with ${name}? This removes all messages and shared contents for you.`}
+          </p>
           <div className="delete-actions">
-            <button type="button" className="btn" onClick={() => setConfirming(false)}>
+            <button type="button" className="btn" onClick={() => setConfirming(null)}>
               Cancel
             </button>
-            <button type="button" className="btn is-danger" onClick={onDelete} autoFocus>
-              Delete
+            <button type="button" className="btn is-danger" onClick={unfriending ? onRemoveFriend : onDelete} autoFocus>
+              {unfriending ? 'Remove' : 'Delete'}
             </button>
           </div>
         </div>
       ) : (
-        <button type="button" className="delete-link" onClick={() => setConfirming(true)}>
-          Delete Conversation
-        </button>
+        <div className="info-actions">
+          {onRemoveFriend && (
+            <button type="button" className="delete-link is-quiet" onClick={() => setConfirming('unfriend')}>
+              Remove Friend
+            </button>
+          )}
+          <button type="button" className="delete-link" onClick={() => setConfirming('delete')}>
+            Delete Conversation
+          </button>
+        </div>
       )}
     </section>
   )

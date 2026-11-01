@@ -20,11 +20,14 @@ type Props = {
   onShowMemory: (memory: Memory) => void
   onCall?: (kind: CallKind) => void
   onAddFriend?: () => void
+  /** Friend requests waiting for an answer; shown on the add-friend button. */
+  requestCount?: number
+  onRemoveFriend?: (userId: string) => void
 }
 
 // Slides in from the right edge over the globe. Stays mounted while closed so the open
 // conversation, scroll position and draft survive closing and reopening.
-export default function ChatPanel({ open, onClose, chat, memories, onShowMemory, onCall, onAddFriend }: Props) {
+export default function ChatPanel({ open, onClose, chat, memories, onShowMemory, onCall, onAddFriend, requestCount = 0, onRemoveFriend }: Props) {
   const { active, other } = chat
   const [view, setView] = useState<'messages' | 'info'>('messages')
   const [highlight, setHighlight] = useState<string | null>(null)
@@ -38,6 +41,14 @@ export default function ChatPanel({ open, onClose, chat, memories, onShowMemory,
     setView('messages')
     setHighlight(null)
   }
+
+  // reading along: anything that arrives while the conversation is open is already seen
+  const count = chat.messages?.length ?? 0
+  const activeId = active?.id
+  const { markRead } = chat
+  useEffect(() => {
+    if (open && activeId && count) void markRead(activeId)
+  }, [open, activeId, count, markRead])
 
   useEffect(() => {
     if (!highlight) return
@@ -61,7 +72,7 @@ export default function ChatPanel({ open, onClose, chat, memories, onShowMemory,
         <span>Messages</span>
       </div>
 
-      <PeopleBar chat={chat} onAddFriend={onAddFriend} />
+      <PeopleBar chat={chat} onAddFriend={onAddFriend} requestCount={requestCount} />
 
       <div className="convo" style={style}>
         {active && other ? (
@@ -97,6 +108,7 @@ export default function ChatPanel({ open, onClose, chat, memories, onShowMemory,
                 onJumpTo={jumpTo}
                 onShowMemory={onShowMemory}
                 onDelete={() => chat.remove(active.id)}
+                onRemoveFriend={onRemoveFriend && (() => onRemoveFriend(other.id))}
               />
             )}
           </>
