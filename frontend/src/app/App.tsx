@@ -65,6 +65,8 @@ export default function App() {
   const [capturesView, setCapturesView] = useState<CapturesView>('list')
   const [viewingId, setViewingId] = useState<string | null>(null)
   const [onMap, setOnMap] = useState(false)
+  // the globe's own sunlight panel: on a narrow window it covers the top, where these controls sit
+  const [sunPanel, setSunPanel] = useState(false)
   const [focus, setFocus] = useState<GlobeFocus | null>(null)
   const { current: notification, push: notify, next: nextNotification } = useNotifications()
   const spotify = useSpotify(signedIn)
@@ -215,7 +217,7 @@ export default function App() {
   const rotation = useMemo(() => ({ ...GLOBE_ROTATION, enabled: GLOBE_ROTATION.enabled && !capturesOpen && atHome }), [capturesOpen, atHome])
 
   return (
-    <main className={`app is-${phase}${chatOpen ? ' chat-open' : ''}${capturesOpen ? ' captures-open' : ''}`}>
+    <main className={`app is-${phase}${chatOpen ? ' chat-open' : ''}${capturesOpen ? ' captures-open' : ''}${sunPanel ? ' sun-panel-open' : ''}`}>
       {/* waits for the session check, so the globe starts in the right place (porthole or home) */}
       {phase !== 'checking' && (
         <GlobeView
@@ -233,6 +235,7 @@ export default function App() {
           onPlace={setDraftPin}
           onPinClick={setViewingId}
           onSurfaceChange={setOnMap}
+          onPanelChange={setSunPanel}
           intro={phase === 'auth' ? authFrame : null}
           showcase={phase === 'auth' ? SHOWCASE_PIN : null}
         />

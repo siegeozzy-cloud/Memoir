@@ -28,6 +28,8 @@ type Props = {
   onPinClick?: (memoryId: string) => void
   /** True while the light 2D map is showing instead of the dark globe. */
   onSurfaceChange?: (light: boolean) => void
+  /** True while the globe's own sunlight panel is open, which on a narrow window covers the top. */
+  onPanelChange?: (open: boolean) => void
   /** Sign-in screen framing; null eases back to the home layout. */
   intro?: GlobeIntro | null
   /** A decorative photo pin (sign-in screen); null makes it vanish. */
@@ -36,22 +38,26 @@ type Props = {
 
 // The globe is the standalone page in public/globe, run in a same-origin iframe.
 // See the "Memoir bridge" section of public/globe/index.html for the message format.
-export default function GlobeView({ memories, details, rotation, stageBottom, stageLeft = 0, controls = true, focus, paused = false, placing = false, draftPin = null, onPinClick, onSurfaceChange, onPlace, intro = null, showcase = null }: Props) {
+export default function GlobeView({ memories, details, rotation, stageBottom, stageLeft = 0, controls = true, focus, paused = false, placing = false, draftPin = null, onPinClick, onSurfaceChange, onPanelChange, onPlace, intro = null, showcase = null }: Props) {
   const frame = useRef<HTMLIFrameElement>(null)
   const [loaded, setLoaded] = useState(false)
-  const handlers = useRef({ onPinClick, onSurfaceChange, onPlace })
+  const handlers = useRef({ onPinClick, onSurfaceChange, onPanelChange, onPlace })
   const introPrimed = useRef(false)
 
   useEffect(() => {
-    handlers.current = { onPinClick, onSurfaceChange, onPlace }
-  }, [onPinClick, onSurfaceChange, onPlace])
+    handlers.current = { onPinClick, onSurfaceChange, onPanelChange, onPlace }
+  }, [onPinClick, onSurfaceChange, onPanelChange, onPlace])
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.source !== frame.current?.contentWindow || e.origin !== window.location.origin) return
-      if (e.data?.type === 'memoir:ready') setLoaded(true)
+      if (e.data?.type === 'memoir:ready') {
+        setLoaded(true)
+        handlers.current.onPanelChange?.(false) // a fresh page has no panel open; don't leave the app hiding things
+      }
       else if (e.data?.type === 'memoir:pin') handlers.current.onPinClick?.(e.data.id)
       else if (e.data?.type === 'memoir:surface') handlers.current.onSurfaceChange?.(!!e.data.light)
+      else if (e.data?.type === 'memoir:panel') handlers.current.onPanelChange?.(!!e.data.open)
       else if (e.data?.type === 'memoir:place') handlers.current.onPlace?.({ lat: e.data.lat, lon: e.data.lon })
     }
     window.addEventListener('message', onMessage)

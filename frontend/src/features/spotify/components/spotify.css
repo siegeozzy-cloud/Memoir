@@ -19,13 +19,14 @@
   overflow: hidden;
   transform: translate(-50%, -110%);
   visibility: hidden;
-  transition: transform 0.4s cubic-bezier(0.55, 0, 0.75, 0.2), visibility 0s linear 0.4s;
+  /* opacity so it can fade out of the way of the globe's sunlight panel, which it can't go behind */
+  transition: transform 0.4s cubic-bezier(0.55, 0, 0.75, 0.2), opacity 0.18s ease, visibility 0s linear 0.4s;
 }
 
 .np.is-shown {
   transform: translate(-50%, 0);
   visibility: visible;
-  transition: transform 0.55s cubic-bezier(0.22, 1.25, 0.36, 1), visibility 0s;
+  transition: transform 0.55s cubic-bezier(0.22, 1.25, 0.36, 1), opacity 0.18s ease, visibility 0s;
 }
 
 .np-watermark {

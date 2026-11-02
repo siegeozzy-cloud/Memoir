@@ -1801,11 +1801,16 @@ tiltBtn.addEventListener('click', () => {
 });
 
 const panel = $('#panel'), sunBtn = $('#sunBtn');
-function closePanel() { if (!panel.hidden) { panel.hidden = true; sunBtn.setAttribute('aria-expanded', 'false'); sunBtn.setAttribute('aria-pressed', 'false'); } }
+// On a narrow window this panel opens as a sheet across the top, under the app's own controls.
+// They live outside this page and so can't be drawn behind part of it; telling the app it's open
+// lets it clear that corner instead.
+function reportPanel() { parent.postMessage({ type: 'memoir:panel', open: !panel.hidden }, location.origin); }
+function closePanel() { if (!panel.hidden) { panel.hidden = true; sunBtn.setAttribute('aria-expanded', 'false'); sunBtn.setAttribute('aria-pressed', 'false'); reportPanel(); } }
 sunBtn.addEventListener('click', () => {
   const open = panel.hidden;
   panel.hidden = !open; sunBtn.setAttribute('aria-expanded', String(open)); sunBtn.setAttribute('aria-pressed', String(open));
   if (open) closeResults();
+  reportPanel();
 });
 const modeStudio = $('#modeStudio'), modeLive = $('#modeLive'), timeIn = $('#time'), timeOut = $('#timeOut'), nowBtn = $('#nowBtn'), subOut = $('#subsolar');
 function setMode(m) {
@@ -1924,8 +1929,10 @@ function updateHud(now) {
    intro { cx, cy, r, lat, lon, jump? } frames the globe for the sign-in porthole (null returns to the home
    layout); showcase { lat, lon, image, label? } is the decorative photo pin there (null makes it vanish).
    Sent back: { type: 'memoir:ready' } once this page listens for settings; { type: 'memoir:pin', id } on pin click; { type: 'memoir:place', lat, lon } when the user drops
-   or drags the new post's pin (placing mode); and { type: 'memoir:surface', light } when the view switches
-   between the dark globe and the light 2D map (so the app can recolour its text). */
+   or drags the new post's pin (placing mode); { type: 'memoir:surface', light } when the view switches
+   between the dark globe and the light 2D map (so the app can recolour its text); and
+   { type: 'memoir:panel', open } when the sunlight panel opens or closes (so the app can get its own
+   controls out from in front of it). */
 const rot = { on: true, speed: 2, resumeMs: 5000, ramp: 0 }; // speed in degrees of longitude per second
 let lastInput = -1e9;
 const poke = () => { lastInput = performance.now(); rot.ramp = 0; };
