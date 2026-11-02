@@ -242,8 +242,9 @@ body.memoir-no-controls .controls { opacity: 0; pointer-events: none; } /* hidde
 .panel p { font: 400 12px/1.5 var(--m-font); color: var(--m-soft); }
 
 @media (max-width: 560px) {
-  /* Memoir moves its details toggle to the bottom right on phones; stack the sun button above it */
-  .controls { top: auto; bottom: calc(87px + env(safe-area-inset-bottom, 0px)); right: 16px; }
+  /* The sun button stays in the right-hand column under Memoir's profile and details buttons at
+     every width — those two no longer move to the bottom on a narrow window, and a control that
+     leaves its column is a control you have to go looking for. */
   /* the app's fun fact and dock are drawn above this page, so the panel opens at the top, clear of them */
   .panel { top: calc(16px + env(safe-area-inset-top, 0px)); bottom: auto; left: 16px; right: 16px; width: auto; }
 }

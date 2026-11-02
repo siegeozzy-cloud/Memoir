@@ -1,12 +1,22 @@
 import type { Place } from '../types'
 import { countryCode, countryDisplayName } from './countries'
 
-// Offline place names from the globe's bundled data: 7,342 Natural Earth cities (places10.json)
-// and country label points (places.json). Used to name a pin and for the Country/City pickers.
+// Offline place names from the globe's bundled data: Natural Earth cities and administrative
+// areas (places10.json) and country label points (places.json). Used to name a pin and for the
+// Country/City pickers, which offer everything the globe puts a label on.
 
 export type LatLon = { lat: number; lon: number }
 
-export type City = { id: number; name: string; country: string; lat: number; lon: number; population: number }
+export type City = {
+  id: number
+  name: string
+  country: string
+  lat: number
+  lon: number
+  population: number
+  /** A town or city, or an administrative area (a province, a state) the globe also labels. */
+  kind: 'city' | 'area'
+}
 
 export type Country = {
   /** The Natural Earth name, as used on City.country. */
@@ -35,11 +45,48 @@ let index: Promise<PlaceIndex> | null = null
 
 export function loadPlaceIndex(): Promise<PlaceIndex> {
   index ??= Promise.all([
-    json<{ places: [string, number, number, number, number, number, string][] }>('places10.json'),
+    json<{ places: [string, number, number, number, number, number, string][]; regions: [string, number, number, number, string][] }>('places10.json'),
     json<{ countries: [string, number, number, number, number, number, string, number][] }>('places.json'),
   ])
     .then(([p10, p]) => {
-      const cities: City[] = p10.places.map(([name, lon, lat, , population, , country], id) => ({ id, name, country, lat, lon, population }))
+      // Natural Earth keeps two lists, and the globe labels both: `places` are cities, with a
+      // population; `regions` are the administrative areas, which is where a lot of real cities
+      // sit — all of Metro Manila outside Quezon City, for one. Anything the globe names should
+      // be choosable here, so both go in.
+      const placeholder = /^[A-Z]{3}-\d/ // "PHL-99 (Philippines minor island)" and its kind
+      const cityCountries = new Set(p10.places.map((r) => r[6]))
+      const rows = [
+        ...p10.places.map(([name, lon, lat, , population, , country]) => ({ name, lon, lat, country, population, kind: 'city' as const })),
+        ...p10.regions
+          // the rest of that list's leftovers are filed under non-countries (Null Island, Scarborough Reef)
+          .filter(([name, , , , country]) => !placeholder.test(name) && (cityCountries.has(country) || countryCode(country)))
+          .map(([name, lon, lat, , country]) => ({ name, lon, lat, country, population: 0, kind: 'area' as const })),
+      ]
+
+      // The two lists spell some countries differently ("Czechia" against "Czech Republic"), so
+      // they're grouped by ISO code where there is one. Cities come first, so their spelling wins.
+      const groupOf = (country: string) => countryCode(country) ?? country
+      const countryName = new Map<string, string>()
+      for (const r of rows) {
+        const group = groupOf(r.country)
+        if (!countryName.has(group)) countryName.set(group, r.country)
+      }
+
+      const cities: City[] = []
+      const byCountry = new Map<string, City[]>()
+      const seen = new Set<string>()
+      for (const r of rows) {
+        const country = countryName.get(groupOf(r.country))!
+        // a place in both lists (Quezon City, Cebu) keeps its city entry, which has the population
+        const once = `${country}\u0000${r.name.toLowerCase()}`
+        if (seen.has(once)) continue
+        seen.add(once)
+        const city: City = { id: cities.length, name: r.name, country, lat: r.lat, lon: r.lon, population: r.population, kind: r.kind }
+        cities.push(city)
+        const list = byCountry.get(country)
+        if (list) list.push(city)
+        else byCountry.set(country, [city])
+      }
 
       // label points from places.json, matched by ISO code because the two files spell some names differently
       const labels = new Map<string, { lat: number; lon: number; size: number }>()
@@ -48,12 +95,6 @@ export function loadPlaceIndex(): Promise<PlaceIndex> {
         if (code && !labels.has(code)) labels.set(code, { lat, lon, size })
       }
 
-      const byCountry = new Map<string, City[]>()
-      for (const c of cities) {
-        const list = byCountry.get(c.country)
-        if (list) list.push(c)
-        else byCountry.set(c.country, [c])
-      }
       const collator = new Intl.Collator('en')
       for (const list of byCountry.values()) list.sort((a, b) => collator.compare(a.name, b.name))
 
@@ -104,9 +145,33 @@ export function nearestCity(cities: City[], lat: number, lon: number): { city: C
   return { city, km }
 }
 
-/** A post's place: named after the nearest city ("Near …" when that city is over 40 km away). */
+/**
+ * How close the pin has to be before a post is named after an administrative area rather than a
+ * town. Deliberately tight: measured against the bundled data, 5 km leaves 99.7% of pins named
+ * exactly as they were before areas joined the list, while still naming the ones that land on a
+ * city that only exists in that list. At 25 km it was 91%, renaming Southampton to Hampshire.
+ */
+const AREA_KM = 5
+
+/**
+ * A post's place: named after the nearest city ("Near …" when that city is over 40 km away).
+ *
+ * An administrative name is used only when the pin is all but standing on it — a pin inside
+ * Caloocan City should say so, but a quiet spot in open country belongs to the nearest town,
+ * not to whichever province or state happens to have its label point closest.
+ */
 export function placeNear(cities: City[], at: LatLon): Place {
-  const { city, km } = nearestCity(cities, at.lat, at.lon)
+  let town: City | undefined, townKm = Infinity
+  let area: City | undefined, areaKm = Infinity
+  for (const c of cities) {
+    const d = distanceKm(at.lat, at.lon, c.lat, c.lon)
+    if (c.kind === 'city') {
+      if (d < townKm) [town, townKm] = [c, d]
+    } else if (d < areaKm) [area, areaKm] = [c, d]
+  }
+  const useArea = area && areaKm <= AREA_KM && areaKm < townKm
+  const city = (useArea ? area : town) ?? cities[0]
+  const km = useArea ? areaKm : townKm
   return {
     name: km <= 40 ? city.name : `Near ${city.name}`,
     country: countryDisplayName(city.country),

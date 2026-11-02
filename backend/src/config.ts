@@ -77,7 +77,7 @@ const Env = z.object({
   TURN_SECRET: optional,
   /** How long a set of TURN credentials worked out from TURN_SECRET stays valid (seconds). */
   TURN_TTL: z.coerce.number().int().default(3600),
-  MAIL_FROM: z.string().default('Memoir <no-reply@memoir.local>'),
+  MAIL_FROM: z.preprocess(blankIsUnset, pasted('MAIL_FROM').default('Memoir <no-reply@memoir.local>')),
   /** Photos and videos: a local folder in development, Cloudinary once CLOUDINARY_URL is set. */
   UPLOAD_DIR: z.string().default('uploads'),
   CLOUDINARY_URL: pastedOptional(
@@ -105,22 +105,33 @@ const env = parsed.data
 const appOrigin = new URL(env.APP_URL).origin
 const apiOrigin = env.API_URL ? new URL(env.API_URL).origin : appOrigin
 
-/** `Memoir <no-reply@example.com>` as its two parts: Brevo's API wants the name and address apart. */
+const unquote = (s: string) => s.trim().replace(/^(['"])([\s\S]*)\1$/, '$2').trim()
+
+/**
+ * `Memoir <no-reply@example.com>` as its two parts: Brevo's API wants the name and address apart.
+ * Quotes are stripped at both levels — a dashboard keeps them literally, where a .env file eats them,
+ * and a stray pair around the whole value would otherwise end up inside the address.
+ */
 function mailAddress(from: string) {
-  const m = /^\s*(?:"?([^"<]*)"?\s*)?<([^>]+)>\s*$/.exec(from)
-  const [name, email] = m ? [m[1]?.trim(), m[2]] : [undefined, from]
-  return { name: name || 'Memoir', email: email.trim() }
+  const cleaned = unquote(from)
+  const m = /^([\s\S]*)<([^>]+)>$/.exec(cleaned)
+  return { name: (m ? unquote(m[1]) : '') || 'Memoir', email: (m ? m[2] : cleaned).trim() }
 }
 const mailFrom = mailAddress(env.MAIL_FROM)
 
 /** How email leaves: Brevo's API, an SMTP server, or — with neither set up — the terminal. */
 const mailVia = env.BREVO_API_KEY ? ('brevo' as const) : env.SMTP_URL ? ('smtp' as const) : ('console' as const)
 
-// Brevo only sends from an address you've verified, so the made-up default would be refused on every send.
-if (mailVia === 'brevo' && /\.(local|localhost|test|invalid|example|internal)$/i.test(mailFrom.email.split('@')[1] ?? '')) {
-  console.error(
-    `Invalid settings:\n  MAIL_FROM: ${env.MAIL_FROM} isn’t a real address, and Brevo only sends from one you’ve verified.\n    Set MAIL_FROM to your verified sender, e.g. MAIL_FROM="Memoir <you@gmail.com>".`,
-  )
+const badMailFrom =
+  !/^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/.test(mailFrom.email)
+    ? `“${mailFrom.email}” isn’t an address. Write it as either you@example.com or Memoir <you@example.com>.`
+    : // Brevo only sends from an address you've verified, so the made-up default is refused on every send.
+      mailVia === 'brevo' && /\.(local|localhost|test|invalid|example|internal)$/i.test(mailFrom.email.split('@')[1]!)
+      ? `“${mailFrom.email}” isn’t a real address, and Brevo only sends from one you’ve verified.`
+      : null
+
+if (badMailFrom) {
+  console.error(`Invalid settings:\n  MAIL_FROM: ${badMailFrom}\n    Set it to your verified sender, e.g. MAIL_FROM=Memoir <you@gmail.com>`)
   process.exit(1)
 }
 

@@ -106,6 +106,8 @@ export default function PostForm(props: Props) {
   const near = pin && places ? nearestCity(places.cities, pin.lat, pin.lon) : null
   const countryKey = near ? near.city.country : chosenCountry
   const cities = places && countryKey ? places.citiesOf(countryKey) : []
+  // the same name the post will be saved under, so the line under the boxes can't disagree with it
+  const placeName = pin && places ? placeNear(places.cities, pin).name : ''
 
   const pickCountry = (key: string) => {
     settled.current = true
@@ -247,10 +249,12 @@ export default function PostForm(props: Props) {
               <option value="" disabled>
                 {places ? 'Choose a Country' : placesFailed ? 'Places unavailable' : 'Loading places…'}
               </option>
+              {/* the name comes first so that typing a letter jumps to it: a browser's
+                  jump-to-letter matches the start of the option, and a flag there matches nothing */}
               {places?.countries.map((c) => (
                 <option key={c.key} value={c.key}>
-                  {c.code ? `${flagEmoji(c.code)}  ` : ''}
                   {c.name}
+                  {c.code ? `  ${flagEmoji(c.code)}` : ''}
                 </option>
               ))}
             </select>
@@ -267,7 +271,7 @@ export default function PostForm(props: Props) {
             <p className="loc-status" aria-live="polite">
               {pin ? (
                 <>
-                  <PinIcon size={12} /> {near && near.km > 40 ? `Near ${near.city.name} · ` : ''}
+                  <PinIcon size={12} /> {placeName.startsWith('Near ') ? `${placeName} · ` : ''}
                   {pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}
                   {samePin(pin, gps) ? ' · from the photo' : ''}
                 </>

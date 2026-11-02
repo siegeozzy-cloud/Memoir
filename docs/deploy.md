@@ -111,8 +111,11 @@ doesn't because it's an ordinary HTTPS call.
 
    ```
    BREVO_API_KEY = xkeysib-…
-   MAIL_FROM     = "Memoir <the-address-you-verified>"
+   MAIL_FROM     = Memoir <the-address-you-verified>
    ```
+
+   No quotes in a dashboard — `.env` files eat them, but Render keeps them as part of the value. (The
+   server strips a stray pair anyway, so an old value with quotes still works.)
 
 5. Redeploy. The log should say `Email: sending through Brevo as …`. If something's wrong it says what,
    and locally `npm run mail -- you@example.com` tells you the same thing faster.

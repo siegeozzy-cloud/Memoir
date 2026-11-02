@@ -38,6 +38,34 @@ const ALIASES: Record<string, string> = {
   saintvincentandthegrenadines: 'VC',
   saintlucia: 'LC',
   saintkittsandnevis: 'KN',
+  saintbarthelemy: 'BL',
+  saintmartin: 'MF',
+  saintpierreandmiquelon: 'PM',
+  sainthelena: 'SH',
+  // The region list spells several countries the older way, where the city list uses the modern
+  // name ("Czechia", "Serbia", "eSwatini"). Both have to land on the same code or the same
+  // country appears twice in the picker.
+  czechrepublic: 'CZ',
+  republicofserbia: 'RS',
+  macedonia: 'MK',
+  swaziland: 'SZ',
+  ssudan: 'SS',
+  unitedrepublicoftanzania: 'TZ',
+  democraticrepublicofthecongo: 'CD',
+  republicofthecongo: 'CG',
+  gambia: 'GM',
+  // territories the region list names in its own way
+  frenchsouthernandantarcticlands: 'TF',
+  heardislandandmcdonaldislands: 'HM',
+  unitedstatesminoroutlyingislands: 'UM',
+  gazastrip: 'PS',
+  westbank: 'PS',
+  ashmoreandcartierislands: 'AU',
+  coralseaislands: 'AU',
+  indianoceanterritories: 'AU',
+  sigave: 'WF',
+  baykonurcosmodrome: 'KZ',
+  usnavalbaseguantanamobay: 'CU',
 }
 
 // Tidier display names for a few Natural Earth spellings.

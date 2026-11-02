@@ -9,7 +9,9 @@
   --outline: rgba(255, 255, 255, 0.5);
   --theirs: #5a636b;
   position: absolute;
-  top: 112px;
+  /* 112px below the top, as drawn — but a short window takes that gap back rather than squeezing
+     the conversation: the panel grows upward until it reaches the top edge at about 648px tall. */
+  top: clamp(0px, calc(100dvh - 648px), 112px);
   right: 0;
   bottom: 0;
   z-index: 8;

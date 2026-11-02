@@ -29,7 +29,7 @@ To send real emails, use [Brevo](https://brevo.com) (300 a day free). In Brevo: 
 
 ```sh
 BREVO_API_KEY=xkeysib-…
-MAIL_FROM="Memoir <you@gmail.com>"   # the address you verified
+MAIL_FROM="Memoir <you@gmail.com>"   # the address you verified (no quotes in a hosting dashboard)
 ```
 
 Then `npm run mail -- you@example.com` sends one test email and says exactly what went wrong if it didn't.

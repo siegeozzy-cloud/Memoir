@@ -9,13 +9,14 @@
   transition: opacity 0.18s ease;
 }
 
-/* the chat panel starts below this button, so it stays. On small screens the panel covers the
-   whole screen, and the button with it. */
-@media (max-width: 760px) {
-  .chat-open .profile {
-    opacity: 0;
-    pointer-events: none;
-  }
+/* A side panel — Messages, Logged Captures, Upload Image — slides in over this corner on a short
+   or narrow window. The button doesn't move out of the way or fade: it simply passes behind the
+   panel, like the globe's own controls do.
+   `auto` rather than a number on purpose: it stops being a stacking context, so the button falls
+   behind the panel while the card below can still lift itself above it. */
+.chat-open .profile,
+.captures-open .profile {
+  z-index: auto;
 }
 
 .profile-btn {
@@ -57,6 +58,8 @@
 
 .profile-card {
   position: absolute;
+  /* over the side panels (8) wherever the button itself happens to sit, under a call (30) */
+  z-index: 20;
   top: 56px;
   right: 0;
   display: grid;
@@ -502,48 +505,13 @@
   gap: 8px;
 }
 
-/* short windows (small laptops, a half-height browser): the same card, tightened so it still fits */
-@media (max-height: 900px) and (min-width: 561px) {
-  .profile-card {
-    gap: 12px;
-    padding: 16px;
-    max-height: calc(100dvh - 76px - env(safe-area-inset-top, 0px));
-  }
-  .pf-id {
-    padding: 7px 7px 7px 12px;
-  }
-  .pf-section h3 {
-    margin-bottom: 7px;
-  }
-  .pf-status-opt {
-    padding: 8px 11px;
-  }
-  /* the hint under each status; the names say enough when space is short */
-  .pf-status-opt small {
-    display: none;
-  }
-  .pf-spotify {
-    padding: 9px 9px 9px 12px;
-  }
-  .pf-row {
-    min-height: 38px;
-  }
-  .pf-name {
-    font-size: 17px;
-  }
-  .pf-avatar-btn .avatar {
-    width: 54px !important;
-    height: 54px !important;
-  }
-}
+/* A short window scrolls the card rather than shrinking what's in it: the text, the avatar and
+   the rows keep the size they have on a full screen, so nothing is harder to read or to hit. */
 
-/* phones, and anything too short for the card: a sheet that slides up from the bottom edge */
+/* phones, and anything too short for the card: a sheet that slides up from the bottom edge.
+   The button itself stays where it is, top right — it's how you close the sheet again, and a
+   control that moves when the window changes shape is a control you have to hunt for. */
 @media (max-width: 560px), (max-height: 640px) {
-  .profile {
-    top: auto;
-    bottom: calc(141px + env(safe-area-inset-bottom, 0px));
-    right: 16px;
-  }
   .profile-card {
     position: fixed;
     top: auto;
@@ -551,7 +519,8 @@
     right: 0;
     bottom: 0;
     width: auto;
-    max-height: 86dvh;
+    /* always stops short of the profile button, so it never covers its own way out */
+    max-height: min(86dvh, calc(100dvh - 76px - env(safe-area-inset-top, 0px)));
     padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     border-bottom: 0;
     border-radius: 24px 24px 0 0;

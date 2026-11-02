@@ -83,6 +83,14 @@
   transition: opacity 0.25s ease;
 }
 
+/* A quarter-screen window has no room for it: the globe is squeezed to a sliver and the text
+   ends up printed across it. The dock keeps the space instead. */
+@media (max-height: 560px) {
+  .fun-fact {
+    display: none;
+  }
+}
+
 /* zoomed in far enough that the light 2D map is behind the text */
 .fun-fact.on-map {
   color: #202124;
@@ -168,7 +176,9 @@
 
 .details-toggle {
   position: absolute;
-  z-index: 9;
+  /* below the side panels (8), like the globe's own sunlight button: a short window brings
+     Messages up over this corner, and the button passes behind it rather than sitting on top */
+  z-index: 7;
   top: calc(74px + env(safe-area-inset-top, 0px));
   right: calc(20px + env(safe-area-inset-right, 0px));
   display: grid;
@@ -184,18 +194,11 @@
   transition: opacity 0.18s ease, top 0.3s cubic-bezier(0.22, 0.9, 0.24, 1);
 }
 
-/* With the chat panel open it moves up by a few pixels, to sit clear of the panel's top edge
-   (the sunlight button below it is behind the panel, so the globe hides that one). */
-.chat-open .details-toggle {
-  top: calc(68px + env(safe-area-inset-top, 0px));
-}
-
-/* on small screens the panel covers the whole screen, and this button with it */
-@media (max-width: 760px) {
-  .chat-open .details-toggle {
-    opacity: 0;
-    pointer-events: none;
-  }
+/* While the profile card is open this button is the only thing left showing through beside it,
+   so it steps out of the way until the card closes. */
+.profile:has(.profile-card) ~ .details-toggle {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .details-toggle:hover,
@@ -217,6 +220,22 @@
   right: 0;
   height: 0;
   z-index: 10;
+}
+
+/* On a quarter-screen window it scales with the Spotify tab it shares this edge with. Scaling the
+   host rather than the tab leaves the slide-in keyframes, which animate transform, free to play
+   as drawn. Kept after the rule above so it can't be undone by it. */
+@media (max-height: 560px) {
+  .notif-host {
+    transform-origin: top center;
+    transform: scale(0.82);
+  }
+}
+
+@media (max-height: 440px) {
+  .notif-host {
+    transform: scale(0.68);
+  }
 }
 
 .notif {
@@ -320,11 +339,6 @@
   .bottom {
     bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     gap: clamp(28px, 4.2vh, 44px);
-  }
-  .details-toggle {
-    top: auto;
-    bottom: calc(33px + env(safe-area-inset-bottom, 0px));
-    right: 16px;
   }
 }
 

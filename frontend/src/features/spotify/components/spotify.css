@@ -4,7 +4,10 @@
 .np {
   --hidden-top: 24px; /* sits above the screen so the spring overshoot never shows a gap */
   position: absolute;
-  z-index: 9;
+  /* below the side panels (8), with the profile and details buttons: a narrow window brings
+     Messages and Logged Captures up under this edge and the tab passes behind them. A
+     notification (10) still comes over the top — that one is asking for attention. */
+  z-index: 7;
   top: calc(-1 * var(--hidden-top));
   left: 50%;
   width: min(376px, calc(100vw - 24px));
@@ -253,6 +256,28 @@
 @media (max-width: 1000px) {
   .lyrics {
     display: none;
+  }
+}
+
+/* A quarter-screen window: at its drawn size this tab takes a third of the height and prints
+   itself over the globe. It scales as a whole rather than being re-laid-out, so the artwork, the
+   controls and the scrubber keep their proportions. In steps rather than as a formula: a ratio
+   worked out from the viewport height would have to divide a length by a length, which isn't
+   reliably supported, and a bad value here would void the transform that centres the tab. */
+@media (max-height: 560px) {
+  .np {
+    --np-scale: 0.82;
+    transform-origin: top center;
+    transform: translate(-50%, -110%) scale(var(--np-scale));
+  }
+  .np.is-shown {
+    transform: translate(-50%, 0) scale(var(--np-scale));
+  }
+}
+
+@media (max-height: 440px) {
+  .np {
+    --np-scale: 0.68;
   }
 }
 
