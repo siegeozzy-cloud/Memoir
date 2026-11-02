@@ -5,13 +5,15 @@ import { ArrowRightIcon, MailIcon } from './icons'
 
 type Props = {
   onSubmit: (input: SignInInput) => Promise<void>
+  /** The 'Forgot password?' link; the screen swaps this form for the reset one. */
+  onForgot: () => void
   /** e.g. the result of opening the email confirmation link. */
   notice?: { text: string; ok: boolean } | null
   /** Focus the first field (after switching from the other form). */
   autoFocus?: boolean
 }
 
-export default function SignInForm({ onSubmit, notice, autoFocus }: Props) {
+export default function SignInForm({ onSubmit, onForgot, notice, autoFocus }: Props) {
   const id = useId()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -75,8 +77,7 @@ export default function SignInForm({ onSubmit, notice, autoFocus }: Props) {
         <Check checked={remember} onChange={(e) => setRemember(e.target.checked)}>
           Keep me signed in
         </Check>
-        {/* TODO: password reset (the backend emails a reset link) */}
-        <button type="button" className="auth-link">
+        <button type="button" className="auth-link" onClick={onForgot}>
           Forgot password?
         </button>
       </div>

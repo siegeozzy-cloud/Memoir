@@ -8,9 +8,9 @@ import { emailTokens, users, type UserRow } from '../../db/schema.ts'
 import { hashToken, newToken, newUniqueId } from '../../lib/crypto.ts'
 import { HttpError, parse } from '../../lib/errors.ts'
 import { sendMail } from '../../lib/mailer.ts'
-import { endSession, startSession } from '../../lib/session.ts'
+import { endAllSessions, endSession, startSession } from '../../lib/session.ts'
 import { emailSchema, nameSchema, passwordSchema } from '../../lib/validation.ts'
-import { alreadyRegistered, verifyEmail } from './emails.ts'
+import { alreadyRegistered, resetEmail, verifyEmail } from './emails.ts'
 import { sessionOf } from './users.ts'
 
 const SignUp = z.object({
@@ -21,11 +21,15 @@ const SignUp = z.object({
 })
 const SignIn = z.object({ email: emailSchema, password: z.string('Enter your password.').min(1, 'Enter your password.').max(128), remember: z.boolean().default(false) })
 const Resend = z.object({ email: emailSchema })
+const Forgot = z.object({ email: emailSchema })
+const ResetPassword = z.object({ token: z.string('That link doesn’t work anymore.').min(1, 'That link doesn’t work anymore.'), password: passwordSchema })
 
 /** Without Brevo or a mail server the link is printed in the backend's terminal, so say so rather than "check your inbox". */
 const delivery = () => (config.mailConfigured ? 'email' : ('console' as const))
 
 const VERIFY_TTL = 24 * 60 * 60 * 1000
+/** A reset link is a way into the account, so it's good for an hour rather than a day. */
+const RESET_TTL = 60 * 60 * 1000
 const RESEND_AFTER = 2 * 60 * 1000 // don't email a new link more often than this
 const strict = (max: number) => ({ config: { rateLimit: { max, timeWindow: '1 minute' } } })
 
@@ -51,6 +55,26 @@ async function sendVerification(user: UserRow, force = false) {
     await sendMail(verifyEmail(user.email, user.name, `${config.apiOrigin}/api/auth/verify?token=${token}`))
   } catch (e) {
     console.error(`Couldn’t send the confirmation email to ${user.email}:`, (e as Error).message)
+  }
+}
+
+/** Emails a fresh link for choosing a new password, unless one went out in the last two minutes. */
+async function sendReset(user: UserRow) {
+  const recent = await db.query.emailTokens.findFirst({
+    where: and(eq(emailTokens.userId, user.id), eq(emailTokens.purpose, 'reset'), gt(emailTokens.createdAt, new Date(Date.now() - RESEND_AFTER))),
+  })
+  if (recent) return
+  const token = newToken()
+  await db.transaction(async (tx) => {
+    // asking again voids the older links, so only the newest one works
+    await tx.delete(emailTokens).where(and(eq(emailTokens.userId, user.id), eq(emailTokens.purpose, 'reset')))
+    await tx.insert(emailTokens).values({ id: hashToken(token), userId: user.id, purpose: 'reset', expiresAt: new Date(Date.now() + RESET_TTL) })
+  })
+  // if the mail server is down the link is simply never used; asking again later sends a new one
+  try {
+    await sendMail(resetEmail(user.email, user.name, `${config.apiOrigin}/api/auth/reset?token=${token}`))
+  } catch (e) {
+    console.error(`Couldn’t send the password reset email to ${user.email}:`, (e as Error).message)
   }
 }
 
@@ -121,6 +145,60 @@ export default async function authRoutes(app: FastifyInstance) {
     const user = await db.query.users.findFirst({ where: eq(users.email, email) })
     if (user && !user.emailVerifiedAt) await sendVerification(user)
     return reply.code(202).send({ status: 'verify-email', email, delivery: delivery() })
+  })
+
+  /**
+   * Answers "check your inbox" whether or not the address has an account, like sign-up, so the form
+   * can't be used to find out who does. An account that never confirmed its email has no password
+   * worth resetting — signing up again on that address claims it.
+   */
+  app.post('/forgot-password', strict(3), async (req, reply) => {
+    const { email } = parse(Forgot, req.body)
+    const user = await db.query.users.findFirst({ where: eq(users.email, email) })
+    if (user?.emailVerifiedAt) await sendReset(user)
+    return reply.code(202).send({ status: 'reset-sent', email, delivery: delivery() })
+  })
+
+  /**
+   * The emailed link. It doesn't spend the token: it hands it to the app, which asks for the new
+   * password and sends it back to /reset-password. `reset` carries either one of the two words
+   * below or the token itself — a token is 43 random characters, so the two can't be confused.
+   */
+  app.get('/reset', async (req, reply) => {
+    const { token } = req.query as { token?: string }
+    const back = (result: string) => reply.redirect(`${config.appOrigin}/?reset=${encodeURIComponent(result)}`)
+    if (!token) return back('invalid')
+    const row = await db.query.emailTokens.findFirst({ where: and(eq(emailTokens.id, hashToken(token)), eq(emailTokens.purpose, 'reset')) })
+    if (!row) return back('invalid')
+    if (row.expiresAt < new Date()) {
+      await db.delete(emailTokens).where(eq(emailTokens.id, row.id))
+      return back('expired')
+    }
+    return back(token)
+  })
+
+  /** Finishes the reset. The link is single-use, and everyone signed in with the old password is signed out. */
+  app.post('/reset-password', strict(5), async (req, reply) => {
+    const input = parse(ResetPassword, req.body)
+    const expired = new HttpError(400, 'bad-token', 'That link has expired or has already been used. Ask for a new one.', 'password')
+    const row = await db.query.emailTokens.findFirst({ where: and(eq(emailTokens.id, hashToken(input.token)), eq(emailTokens.purpose, 'reset')) })
+    if (!row) throw expired
+    if (row.expiresAt < new Date()) {
+      await db.delete(emailTokens).where(eq(emailTokens.id, row.id))
+      throw expired
+    }
+    const user = await db.query.users.findFirst({ where: eq(users.id, row.userId) })
+    if (!user) throw expired
+    const passwordHash = await hash(input.password)
+    await db.transaction(async (tx) => {
+      // opening the link proves the address is theirs, so an unconfirmed account is confirmed by it too
+      await tx.update(users).set({ passwordHash, emailVerifiedAt: user.emailVerifiedAt ?? new Date(), updatedAt: new Date() }).where(eq(users.id, user.id))
+      // both kinds: any older link is dead once the password has changed
+      await tx.delete(emailTokens).where(eq(emailTokens.userId, user.id))
+    })
+    // whoever was signed in with the old password no longer is
+    await endAllSessions(user.id, reply)
+    return reply.code(204).send()
   })
 
   app.post('/signin', strict(10), async (req, reply) => {

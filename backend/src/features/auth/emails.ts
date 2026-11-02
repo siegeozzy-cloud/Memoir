@@ -19,6 +19,18 @@ export const verifyEmail = (to: string, name: string, url: string) =>
     { label: 'Confirm my email', url },
   )
 
+export const resetEmail = (to: string, name: string, url: string) =>
+  mail(
+    to,
+    'Choose a new Memoir password',
+    [
+      `Hi ${name},`,
+      'Use the link below to set a new password. It works for one hour, and only once.',
+      'If you didn’t ask for this, you can ignore this email — your password stays as it is until the link is used.',
+    ],
+    { label: 'Choose a new password', url },
+  )
+
 /** Someone tried to sign up with an address that already has an account. */
 export const alreadyRegistered = (to: string, name: string) =>
   mail(

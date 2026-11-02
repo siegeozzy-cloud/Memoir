@@ -241,7 +241,16 @@ export default function App() {
         />
       )}
 
-      {(phase === 'auth' || phase === 'entering') && <AuthScreen leaving={phase === 'entering'} onSignIn={signIn} onSignUp={signUp} onFrame={setAuthFrame} />}
+      {(phase === 'auth' || phase === 'entering') && (
+        <AuthScreen
+          leaving={phase === 'entering'}
+          onSignIn={signIn}
+          onSignUp={signUp}
+          onForgotPassword={(email) => authService.forgotPassword(email)}
+          onResetPassword={(input) => authService.resetPassword(input)}
+          onFrame={setAuthFrame}
+        />
+      )}
 
       {/* Mounted while signed out too (hidden), so the globe's home layout is measured before the entrance. */}
       <div className="home-ui" inert={!atHome}>

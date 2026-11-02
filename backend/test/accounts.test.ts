@@ -12,7 +12,7 @@ import { testOutbox } from '../src/lib/mailer.ts'
 const app = await buildApp()
 const ORIGIN = 'http://127.0.0.1:5173'
 const email = `test+${Date.now()}@example.com`
-const password = 'correct horse battery staple'
+let password = 'correct horse battery staple'
 let cookie = ''
 
 const json = (method: 'POST' | 'PATCH' | 'PUT' | 'GET' | 'DELETE', url: string, payload?: object) =>
@@ -150,7 +150,7 @@ const multipart = (filename: string, type: string, data: Buffer) => {
   return { body, type: `multipart/form-data; boundary=${boundary}` }
 }
 
-test('profile picture: re-encoded to a 512px WebP and served', async () => {
+test('profile picture: re-encoded to a 512px JPEG and served', async () => {
   const png = await sharp({ create: { width: 900, height: 600, channels: 3, background: '#3a92d0' } }).png().toBuffer()
   const { body, type } = multipart('me.png', 'image/png', png)
   const r = await app.inject({ method: 'PUT', url: '/api/account/avatar', payload: body, headers: { 'content-type': type, cookie, origin: ORIGIN } })
@@ -203,6 +203,47 @@ test('Spotify tokens are encrypted at rest', () => {
   assert.throws(() => decrypt(tampered))
 })
 
+test('forgot password: the emailed link sets a new password and ends the old sessions', async () => {
+  const next = 'a quite different passphrase'
+  const wasSignedIn = cookie
+
+  // the same answer for an address with no account, so the form can't be used to find one
+  const nobody = await json('POST', '/api/auth/forgot-password', { email: `nobody+${Date.now()}@example.com` })
+  const somebody = await json('POST', '/api/auth/forgot-password', { email })
+  const a = nobody.json() as { status: string; delivery?: string }
+  const b = somebody.json() as { status: string; delivery?: string }
+  assert.equal(somebody.statusCode, 202)
+  assert.equal(nobody.statusCode, somebody.statusCode)
+  assert.equal(a.status, b.status)
+  assert.equal(a.delivery, b.delivery)
+  assert.match(testOutbox.at(-1)!.subject, /new Memoir password/)
+
+  // the emailed link hands the token to the app rather than spending it
+  const link = new URL(lastLink())
+  const hop = await app.inject({ method: 'GET', url: link.pathname + link.search })
+  assert.equal(hop.statusCode, 302)
+  const token = new URL(String(hop.headers.location)).searchParams.get('reset')!
+  assert.ok(token.length > 20, 'the app is handed the token itself')
+
+  // a password that's too short is refused, and the link still works afterwards
+  const short = await json('POST', '/api/auth/reset-password', { token, password: 'short' })
+  assert.equal(short.statusCode, 400)
+  assert.equal(short.json().error.field, 'password')
+
+  assert.equal((await json('POST', '/api/auth/reset-password', { token, password: next })).statusCode, 204)
+  assert.equal((await json('POST', '/api/auth/reset-password', { token, password: next })).statusCode, 400, 'the link works once')
+
+  // the old password, and the session it had opened, are both finished with
+  cookie = ''
+  assert.equal((await json('POST', '/api/auth/signin', { email, password })).statusCode, 401)
+  assert.equal((await app.inject({ method: 'GET', url: '/api/account', headers: { origin: ORIGIN, cookie: wasSignedIn } })).statusCode, 401)
+
+  const fresh = await json('POST', '/api/auth/signin', { email, password: next, remember: true })
+  assert.equal(fresh.statusCode, 200)
+  password = next
+  cookie = String(fresh.headers['set-cookie']).split(';')[0]
+})
+
 test('deactivate signs out everywhere; signing in brings the account back', async () => {
   const r = await json('POST', '/api/account/deactivate')
   assert.equal(r.statusCode, 204)
@@ -221,3 +262,4 @@ test('delete removes the account for good', async () => {
   const signin = await json('POST', '/api/auth/signin', { email, password })
   assert.equal(signin.statusCode, 401)
 })
+

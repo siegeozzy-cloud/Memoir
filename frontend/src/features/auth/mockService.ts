@@ -47,4 +47,14 @@ export const mockAuthService: AuthService = {
     localStorage.removeItem(KEY)
     sessionStorage.removeItem(KEY)
   },
+
+  // no mail without the backend, so the forms run through to their "check your inbox" state
+  async forgotPassword(email) {
+    await wait(700)
+    return { email: email.trim(), delivery: 'console' }
+  },
+
+  async resetPassword() {
+    await wait(700)
+  },
 }

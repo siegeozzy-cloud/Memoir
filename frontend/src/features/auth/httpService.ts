@@ -1,6 +1,6 @@
 import { api, ApiError } from '../../shared/lib/api'
 import { clearToken, keepToken } from '../../shared/lib/session-token'
-import { AuthError, type AuthService, type Session, type SignUpResult } from './service'
+import { AuthError, type AuthService, type ForgotResult, type Session, type SignUpResult } from './service'
 
 // The real accounts backend (../backend, /api/auth).
 
@@ -30,5 +30,10 @@ export const httpAuthService: AuthService = {
   async signOut() {
     await api('/auth/signout', { method: 'POST' }).catch(() => {}) // sign out locally even if the server is unreachable
     clearToken()
+  },
+  forgotPassword: (email) => asAuthError(api<ForgotResult>('/auth/forgot-password', { method: 'POST', json: { email } })),
+  async resetPassword(input) {
+    await asAuthError(api('/auth/reset-password', { method: 'POST', json: input }))
+    clearToken() // the reset ended every session, including any this browser was holding
   },
 }

@@ -18,7 +18,8 @@
     "db:migrate": "node --env-file-if-exists=.env src/db/migrate.ts",
     "test": "NODE_ENV=test node --env-file-if-exists=.env --test test/*.test.ts",
     "verify": "node --env-file-if-exists=.env src/dev/verify.ts",
-    "mail": "node --env-file-if-exists=.env src/dev/mail.ts"
+    "mail": "node --env-file-if-exists=.env src/dev/mail.ts",
+    "reset-link": "node --env-file-if-exists=.env src/dev/reset-link.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",

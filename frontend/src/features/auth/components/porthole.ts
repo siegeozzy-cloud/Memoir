@@ -1,7 +1,7 @@
 import showcasePhoto from '../../../assets/showcase-photo.svg'
 import type { GlobeIntro, GlobeShowcase } from '../../globe/GlobeView'
 
-export type AuthView = 'signin' | 'signup'
+export type AuthView = 'signin' | 'signup' | 'forgot' | 'reset'
 type Rect = { x: number; y: number; w: number; h: number }
 
 /** The photo pin in the porthole view: the Benguet highlands, Luzon. Placeholder photo. */
@@ -15,6 +15,9 @@ export const SHOWCASE_PIN: GlobeShowcase = { lat: 16.6, lon: 120.9, image: showc
 export const PORT_WINDOWS: Record<AuthView, { label: string; look: { lat: number; lon: number } }> = {
   signin: { label: '01', look: { lat: 8.8, lon: 122.1 } },
   signup: { label: '02', look: { lat: -25.5, lon: 134.2 } },
+  // resetting a password is a detour off sign-in, so the view out of the window doesn't move
+  forgot: { label: '03', look: { lat: 8.8, lon: 122.1 } },
+  reset: { label: '04', look: { lat: 8.8, lon: 122.1 } },
 }
 
 /**

@@ -11,6 +11,10 @@ export type Session = {
 }
 
 export type SignInInput = { email: string; password: string; remember: boolean }
+export type ResetInput = { token: string; password: string }
+
+/** Where the reset link went, so the form can say "check your inbox" or "look in the terminal". */
+export type ForgotResult = { email: string; delivery?: 'email' | 'console' }
 export type SignUpInput = { name: string; email: string; password: string; acceptedTerms: boolean }
 
 /**
@@ -24,7 +28,7 @@ export type SignUpResult =
 
 /** A message to show on the form, e.g. "Wrong email or password". `field` points at the input it's about. */
 export class AuthError extends Error {
-  readonly field?: 'name' | 'email' | 'password' | 'acceptedTerms'
+  readonly field?: 'name' | 'email' | 'password' | 'confirm' | 'acceptedTerms'
 
   constructor(message: string, field?: AuthError['field']) {
     super(message)
@@ -44,4 +48,8 @@ export interface AuthService {
   signIn(input: SignInInput): Promise<Session>
   signUp(input: SignUpInput): Promise<SignUpResult>
   signOut(): Promise<void>
+  /** Emails a link for choosing a new password. Answers the same whether or not the address has an account. */
+  forgotPassword(email: string): Promise<ForgotResult>
+  /** Finishes a reset with the token carried back from that link. */
+  resetPassword(input: ResetInput): Promise<void>
 }
