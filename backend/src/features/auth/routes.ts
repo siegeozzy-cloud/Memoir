@@ -22,8 +22,8 @@ const SignUp = z.object({
 const SignIn = z.object({ email: emailSchema, password: z.string('Enter your password.').min(1, 'Enter your password.').max(128), remember: z.boolean().default(false) })
 const Resend = z.object({ email: emailSchema })
 
-/** Without a mail server the link is printed in the backend's terminal, so say so rather than "check your inbox". */
-const delivery = () => (config.SMTP_URL ? 'email' : ('console' as const))
+/** Without Brevo or a mail server the link is printed in the backend's terminal, so say so rather than "check your inbox". */
+const delivery = () => (config.mailConfigured ? 'email' : ('console' as const))
 
 const VERIFY_TTL = 24 * 60 * 60 * 1000
 const RESEND_AFTER = 2 * 60 * 1000 // don't email a new link more often than this

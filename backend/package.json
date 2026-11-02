@@ -17,7 +17,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env src/db/migrate.ts",
     "test": "NODE_ENV=test node --env-file-if-exists=.env --test test/*.test.ts",
-    "verify": "node --env-file-if-exists=.env src/dev/verify.ts"
+    "verify": "node --env-file-if-exists=.env src/dev/verify.ts",
+    "mail": "node --env-file-if-exists=.env src/dev/mail.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",

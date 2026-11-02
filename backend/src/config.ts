@@ -23,6 +23,9 @@ const pasted = (name: string) =>
     return cleaned === '' ? undefined : cleaned
   }, z.string())
 
+/** The same, for a setting that may simply be left out — or left blank, as dashboards and .env files do. */
+const pastedOptional = <T extends z.ZodType>(schema: T) => z.preprocess(blankIsUnset, schema.optional())
+
 /** A value copied from documentation with <your_api_key> still in it. */
 const hasPlaceholders = (v: string) => /[<>]/.test(v)
 
@@ -50,6 +53,18 @@ const Env = z.object({
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'TOKEN_KEY must be 32 random bytes, base64 (see .env.example)'),
   SPOTIFY_CLIENT_ID: optional,
   SPOTIFY_CLIENT_SECRET: optional,
+  /**
+   * Brevo's transactional email API key, from Brevo → SMTP & API → API keys. Preferred to SMTP_URL:
+   * it's an ordinary HTTPS call, so it still works on networks and hosts that block the mail ports.
+   */
+  BREVO_API_KEY: pastedOptional(
+    pasted('BREVO_API_KEY')
+      .refine((v) => !hasPlaceholders(v), 'BREVO_API_KEY still has <placeholders> in it — copy the real key from Brevo → SMTP & API → API keys.')
+      .refine(
+        (v) => v.startsWith('xkeysib-'),
+        'BREVO_API_KEY must start with xkeysib- — that’s an API key (Brevo → SMTP & API → API keys). An SMTP key (xsmtpsib-) goes in SMTP_URL instead.',
+      ),
+  ),
   SMTP_URL: optional,
   // Calls: STUN lets two devices find a path to each other; TURN relays when they can't
   // (see docker-compose.yml for a local coturn).
@@ -65,16 +80,17 @@ const Env = z.object({
   MAIL_FROM: z.string().default('Memoir <no-reply@memoir.local>'),
   /** Photos and videos: a local folder in development, Cloudinary once CLOUDINARY_URL is set. */
   UPLOAD_DIR: z.string().default('uploads'),
-  CLOUDINARY_URL: pasted('CLOUDINARY_URL')
-    .refine(
-      (v) => !hasPlaceholders(v),
-      'CLOUDINARY_URL still has the <your_api_key> and <your_api_secret> placeholders in it. Open the Cloudinary dashboard \u2192 Settings \u2192 API Keys and copy the real values in.',
-    )
-    .refine(
-      (v) => v.startsWith('cloudinary://'),
-      'CLOUDINARY_URL must start with cloudinary:// \u2014 paste only the value, not the "CLOUDINARY_URL=" part in front of it.',
-    )
-    .optional(),
+  CLOUDINARY_URL: pastedOptional(
+    pasted('CLOUDINARY_URL')
+      .refine(
+        (v) => !hasPlaceholders(v),
+        'CLOUDINARY_URL still has the <your_api_key> and <your_api_secret> placeholders in it. Open the Cloudinary dashboard \u2192 Settings \u2192 API Keys and copy the real values in.',
+      )
+      .refine(
+        (v) => v.startsWith('cloudinary://'),
+        'CLOUDINARY_URL must start with cloudinary:// \u2014 paste only the value, not the "CLOUDINARY_URL=" part in front of it.',
+      ),
+  ),
   /** Everything Memoir stores there sits under this folder, so one account can hold several apps. */
   CLOUDINARY_FOLDER: z.string().default('memoir'),
 })
@@ -89,6 +105,25 @@ const env = parsed.data
 const appOrigin = new URL(env.APP_URL).origin
 const apiOrigin = env.API_URL ? new URL(env.API_URL).origin : appOrigin
 
+/** `Memoir <no-reply@example.com>` as its two parts: Brevo's API wants the name and address apart. */
+function mailAddress(from: string) {
+  const m = /^\s*(?:"?([^"<]*)"?\s*)?<([^>]+)>\s*$/.exec(from)
+  const [name, email] = m ? [m[1]?.trim(), m[2]] : [undefined, from]
+  return { name: name || 'Memoir', email: email.trim() }
+}
+const mailFrom = mailAddress(env.MAIL_FROM)
+
+/** How email leaves: Brevo's API, an SMTP server, or — with neither set up — the terminal. */
+const mailVia = env.BREVO_API_KEY ? ('brevo' as const) : env.SMTP_URL ? ('smtp' as const) : ('console' as const)
+
+// Brevo only sends from an address you've verified, so the made-up default would be refused on every send.
+if (mailVia === 'brevo' && /\.(local|localhost|test|invalid|example|internal)$/i.test(mailFrom.email.split('@')[1] ?? '')) {
+  console.error(
+    `Invalid settings:\n  MAIL_FROM: ${env.MAIL_FROM} isn’t a real address, and Brevo only sends from one you’ve verified.\n    Set MAIL_FROM to your verified sender, e.g. MAIL_FROM="Memoir <you@gmail.com>".`,
+  )
+  process.exit(1)
+}
+
 export const config = {
   ...env,
   dev: env.NODE_ENV !== 'production',
@@ -102,6 +137,10 @@ export const config = {
    */
   spotifyRedirectUri: `${apiOrigin}/api/spotify/callback`,
   spotifyConfigured: !!(env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET),
+  mailVia,
+  mailFrom,
+  /** Whether confirmation links reach a real inbox, or are only printed in the terminal. */
+  mailConfigured: mailVia !== 'console',
   stunUrls: env.STUN_URLS.split(',').map((u) => u.trim()).filter(Boolean),
   turnUrls: env.TURN_URL?.split(',').map((u) => u.trim()).filter(Boolean) ?? [],
   turnConfigured: !!(env.TURN_URL && (env.TURN_SECRET || (env.TURN_USERNAME && env.TURN_PASSWORD))),

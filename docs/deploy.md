@@ -58,7 +58,7 @@ the server.
    | `TOKEN_KEY` | run `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
    | `API_URL` | `https://memoir-api.onrender.com` (Render shows the real one; fill it in after the first deploy) |
    | `APP_URL` | `https://memoir-album.vercel.app` |
-   | `SMTP_URL`, `MAIL_FROM` | see step 6 — leave empty to start |
+   | `BREVO_API_KEY`, `MAIL_FROM` | see step 6 — leave empty to start |
    | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | from your Spotify app |
    | `TURN_URL`, `TURN_SECRET` | see step 7 — leave empty to start |
    | `EXTRA_ORIGINS` | leave empty for now |
@@ -98,19 +98,35 @@ until Spotify grants extended access.
 
 ## 6. Email
 
-Without a domain, use your Gmail with an [app password](https://myaccount.google.com/apppasswords)
-(2-Step Verification has to be on first):
+Use [Brevo](https://www.brevo.com) — 300 emails a day free, no domain needed, and it works where SMTP
+doesn't because it's an ordinary HTTPS call.
 
-```
-SMTP_URL  = smtps://you%40gmail.com:sixteenletterapppassword@smtp.gmail.com:465
-MAIL_FROM = "Memoir <you@gmail.com>"
-```
+1. Sign up at [brevo.com](https://www.brevo.com). It asks what you're sending; "transactional" is the
+   honest answer, and the free Starter plan is enough.
+2. **Senders, domains & dedicated IPs → Senders → Add a sender.** Use the address you want the emails
+   to come from (your Gmail is fine). Brevo emails it a confirmation link — open it. Until you do,
+   every send is refused.
+3. **SMTP & API → API keys → Generate a new API key.** Copy it now; Brevo won't show it again.
+4. In Render → your service → **Environment**:
 
-The `%40` stands for the `@`. With these empty, the API prints confirmation links in Render's log
-instead — which works, but everyone signing up would have to ask you for their link.
+   ```
+   BREVO_API_KEY = xkeysib-…
+   MAIL_FROM     = "Memoir <the-address-you-verified>"
+   ```
 
-When you do buy a domain, move to [Resend](https://resend.com) (3,000 free emails a month): mail from
-your own domain is far less likely to be treated as spam.
+5. Redeploy. The log should say `Email: sending through Brevo as …`. If something's wrong it says what,
+   and locally `npm run mail -- you@example.com` tells you the same thing faster.
+
+With `BREVO_API_KEY` empty the API prints confirmation links in Render's log instead — which works, but
+everyone signing up would have to ask you for their link. `SMTP_URL` is still read when
+`BREVO_API_KEY` isn't set, for any other mail server; Brevo's own relay is
+`smtp://<login>:<smtp-key>@smtp-relay.brevo.com:587`, though hosts and home networks sometimes block
+that port.
+
+Sent email is listed under **Transactional → Logs** in Brevo, with what happened to each one
+(delivered, bounced, marked as spam). When you do buy a domain, verify it in Brevo and send from
+`no-reply@yourdomain` — mail from your own domain is far less likely to be treated as spam than mail
+from a Gmail address Brevo sends on behalf of.
 
 ## 7. Calls
 

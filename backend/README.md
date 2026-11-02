@@ -20,23 +20,32 @@ npm run dev               # http://127.0.0.1:4000, restarts on changes
 Then run the web app (`cd frontend && npm run dev`) and open <http://127.0.0.1:5173>. The web app forwards `/api` here, so the
 app and the API share one address and the session cookie just works.
 
-**Confirmation emails** are printed in this terminal while `SMTP_URL` is empty — nothing is sent to a real inbox. Open the
-"Confirm my email" link printed there, or run `npm run verify -- you@example.com` to confirm an account without it.
-Set `SMTP_URL` to send real emails; with a Gmail account that means two-step verification plus an
-[app password](https://myaccount.google.com/apppasswords):
+**Confirmation emails** are printed in this terminal while `BREVO_API_KEY` and `SMTP_URL` are both empty — nothing is sent to a
+real inbox. Open the "Confirm my email" link printed there, or run `npm run verify -- you@example.com` to confirm an account
+without it.
+
+To send real emails, use [Brevo](https://brevo.com) (300 a day free). In Brevo: verify the address you'll send from under
+**Senders, domains & dedicated IPs**, then make a key under **SMTP & API → API keys**.
 
 ```sh
-SMTP_URL=smtps://you%40gmail.com:sixteenletterapppw@smtp.gmail.com:465
-MAIL_FROM="Memoir <you@gmail.com>"
+BREVO_API_KEY=xkeysib-…
+MAIL_FROM="Memoir <you@gmail.com>"   # the address you verified
 ```
 
-The server checks these when it starts and says whether email will get out.
+Then `npm run mail -- you@example.com` sends one test email and says exactly what went wrong if it didn't.
+The server runs the same check when it starts.
+
+Brevo's API is a plain HTTPS call, which is why it's the default here: ports 587 and 465 are blocked on many home and
+campus networks, and a blocked SMTP port looks like a sign-up that hangs. `SMTP_URL` still works for any other mail
+server (including Brevo's own relay, `smtp://<login>:<smtp-key>@smtp-relay.brevo.com:587`) and is used when
+`BREVO_API_KEY` is empty.
 
 | Command | |
 | --- | --- |
 | `npm run dev` | Start with auto-restart. Applies database migrations first. |
 | `npm test` | End-to-end tests (accounts, friends, messaging, posts, calls) against the dev database. |
 | `npm run verify -- <email>` | Development only: confirms an account without the email link. |
+| `npm run mail -- <email>` | Sends one test email, to check Brevo (or SMTP) is set up. |
 | `npm run typecheck` | TypeScript check. |
 | `npm run db:up` / `db:down` | Start / stop PostgreSQL. Data is kept in a Docker volume. |
 | `npm run turn:up` / `turn:logs` | Start / watch the TURN relay (coturn). |
