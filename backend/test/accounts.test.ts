@@ -263,3 +263,24 @@ test('delete removes the account for good', async () => {
   assert.equal(signin.statusCode, 401)
 })
 
+
+test('Cloudinary URLs name the resource type, so they resolve', async () => {
+  // Delivery happens from /image/ or /video/; "auto" is an upload setting, and a URL built with it
+  // 404s at Cloudinary. This caught nothing locally, where files are served from disk instead.
+  const { urlFor } = await import('../src/lib/storage.ts')
+  const { v2: cloudinary } = await import('cloudinary')
+  cloudinary.config({ cloud_name: 'test-cloud', secure: true })
+
+  const photo = urlFor('cl:memoir/media/photo', 'media', 'image')
+  const clip = urlFor('cl:memoir/media/clip', 'media', 'video')
+  const face = urlFor('cl:memoir/avatars/face', 'avatars')
+  for (const [what, url] of [['photo', photo], ['clip', clip], ['avatar', face]] as const) {
+    assert.doesNotMatch(url, /\/auto\/upload\//, `${what} must not be delivered from /auto/`)
+  }
+  assert.match(photo, /\/image\/upload\//)
+  assert.match(clip, /\/video\/upload\//)
+  assert.match(face, /\/image\/upload\//) // avatars are always pictures
+
+  // a key that isn't Cloudinary's is still served by this API, whatever the kind
+  assert.match(urlFor('abc.jpg', 'media', 'video'), /^\/api\/files\/media\/abc\.jpg$/)
+})

@@ -52,7 +52,7 @@ async function shape(rows: Row[]) {
     place: { name: m.placeName, country: m.country, ...(m.countryCode ? { countryCode: m.countryCode } : {}), lat: m.lat, lon: m.lon },
     items: items
       .filter((i) => i.memoryId === m.id)
-      .map((i) => ({ id: i.id, kind: i.kind, url: mediaUrl(i.file), ...(i.name ? { name: i.name } : {}), ...(i.width ? { width: i.width } : {}), ...(i.height ? { height: i.height } : {}) })),
+      .map((i) => ({ id: i.id, kind: i.kind, url: mediaUrl(i.file, i.kind), ...(i.name ? { name: i.name } : {}), ...(i.width ? { width: i.width } : {}), ...(i.height ? { height: i.height } : {}) })),
     taggedIds: tags.filter((t) => t.memoryId === m.id).map((t) => t.userId),
     capturedAt: m.capturedAt.toISOString(),
     createdAt: m.createdAt.toISOString(),

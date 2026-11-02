@@ -21,7 +21,7 @@ const JPEG = { quality: 82, mozjpeg: true, progressive: true } as const
 
 export type StoredMedia = { kind: 'image' | 'video'; file: string; name: string; width?: number; height?: number }
 
-export const mediaUrl = (file: string) => urlFor(file, 'media')
+export const mediaUrl = (file: string, kind: StoredMedia['kind'] = 'image') => urlFor(file, 'media', kind)
 
 /** Videos are stored as sent, so only container types browsers can play are allowed. */
 function videoExtension(data: Buffer) {

@@ -99,7 +99,7 @@ export async function shapeMessages(rows: MessageRow[], meId: string, readerSees
     attachments: (byMessage.get(m.id) ?? []).map((f) => ({
       id: f.id,
       kind: f.kind,
-      url: mediaUrl(f.file),
+      url: mediaUrl(f.file, f.kind),
       name: f.name,
       ...(f.width ? { width: f.width } : {}),
       ...(f.height ? { height: f.height } : {}),

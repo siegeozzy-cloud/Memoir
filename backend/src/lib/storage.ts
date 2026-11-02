@@ -54,9 +54,12 @@ export async function putFile(folder: Folder, data: Buffer, kind: Kind, extensio
  * The address the app should load this file from. Local files are given the API's full address when the
  * app lives somewhere else, since a relative one would point at the app and find nothing.
  */
-export function urlFor(key: string, folder: Folder) {
+export function urlFor(key: string, folder: Folder, kind: Kind = 'image') {
   if (!key.startsWith(CLOUD)) return `${config.API_URL ? config.apiOrigin : ''}/api/files/${folder}/${key}`
-  return cloudinary.url(key.slice(CLOUD.length), { secure: true, resource_type: 'auto' })
+  // Cloudinary delivers from /image/, /video/ or /raw/ — "auto" is an *upload* setting, and a URL
+  // built with it 404s. The kind comes from the row the key was read from, so files already stored
+  // are addressed correctly too.
+  return cloudinary.url(key.slice(CLOUD.length), { secure: true, resource_type: kind })
 }
 
 export async function removeFile(key: string | null, folder: Folder) {
