@@ -9,6 +9,16 @@ import { putFile, removeFile, urlFor } from './storage.ts'
 
 const MAX_SIDE = 2048
 
+/**
+ * Everything is stored as JPEG. An iPhone's HEIC can't be shown by most Android and Windows
+ * browsers, and WebP — what this used to write — still misses a long tail of older phones and
+ * desktop apps. JPEG is the one format anything with a screen can open.
+ *
+ * mozjpeg buys back most of the size WebP was saving; progressive so a slow connection shows the
+ * whole picture roughly before it shows any of it sharply.
+ */
+const JPEG = { quality: 82, mozjpeg: true, progressive: true } as const
+
 export type StoredMedia = { kind: 'image' | 'video'; file: string; name: string; width?: number; height?: number }
 
 export const mediaUrl = (file: string) => urlFor(file, 'media')
@@ -35,8 +45,8 @@ export async function saveMedia(data: Buffer, originalName: string, mimetype: st
 
   try {
     const image = sharp(data, { limitInputPixels: 100_000_000 }).rotate().resize({ width: MAX_SIDE, height: MAX_SIDE, fit: 'inside', withoutEnlargement: true })
-    const { data: out, info } = await image.webp({ quality: 82 }).toBuffer({ resolveWithObject: true })
-    return { kind: 'image', file: await putFile('media', out, 'image', 'webp'), name, width: info.width, height: info.height }
+    const { data: out, info } = await image.flatten({ background: '#ffffff' }).jpeg(JPEG).toBuffer({ resolveWithObject: true })
+    return { kind: 'image', file: await putFile('media', out, 'image', 'jpg'), name, width: info.width, height: info.height }
   } catch (e) {
     if (e instanceof HttpError) throw e
     throw new HttpError(400, 'bad-image', 'That file isn’t a picture we can use. Try a JPEG, PNG or HEIC.', 'files')

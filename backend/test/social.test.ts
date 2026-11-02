@@ -126,11 +126,11 @@ test('a message with a photo, with the photo re-encoded and served', async () =>
   messageId = message.id
   assert.equal(message.text, 'Look at this one')
   assert.equal(message.attachments.length, 1)
-  assert.match(message.attachments[0].url, /^\/api\/files\/media\/.+\.webp$/)
+  assert.match(message.attachments[0].url, /^\/api\/files\/media\/.+\.jpg$/)
 
   const file = await app.inject({ method: 'GET', url: message.attachments[0].url })
   assert.equal(file.statusCode, 200)
-  assert.equal((await sharp(file.rawPayload).metadata()).format, 'webp')
+  assert.equal((await sharp(file.rawPayload).metadata()).format, 'jpeg')
   assert.equal(file.headers['x-content-type-options'], 'nosniff')
 
   const theirs = await as(jack, 'GET', `/api/chat/conversations/${conversationId}/messages`)

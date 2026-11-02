@@ -2,8 +2,8 @@
    a 574px card, 98px from the left and 103px from the top, ending just above the dock. */
 
 .captures {
-  --cap-line: rgba(255, 255, 255, 0.12);
-  --cap-soft: rgba(255, 255, 255, 0.55);
+  --cap-line: var(--divider);
+  --cap-soft: var(--muted);
   --cap-danger: #e5484d;
   position: absolute;
   z-index: 8;
@@ -13,10 +13,10 @@
   width: min(574px, calc(100vw - 32px));
   display: flex;
   flex-direction: column;
-  background: #1c1c1c;
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  border-radius: 43px;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
   overflow: hidden;
   visibility: hidden;
   opacity: 0;
@@ -51,16 +51,17 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 63px;
-  margin: 26px 24px 0;
-  padding: 0 22px 0 29px;
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  height: 48px;
+  margin: 22px 24px 0;
+  padding: 0 18px;
+  border: 1px solid var(--field-line);
   border-radius: 999px;
+  background: var(--tile);
   color: #fff;
 }
 
 .cap-search:focus-within {
-  border-color: rgba(255, 255, 255, 0.9);
+  border-color: var(--field-focus);
 }
 
 .cap-search input {
@@ -70,13 +71,12 @@
   border: 0;
   background: none;
   color: #fff;
-  font: 300 21px/1 var(--font);
-  letter-spacing: 0.01em;
+  font: 400 15px/1 var(--font);
   outline: none;
 }
 
 .cap-search input::placeholder {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--muted);
 }
 
 .cap-search input::-webkit-search-cancel-button {
@@ -90,17 +90,16 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 38px 39px 0 41px;
-  padding: 0 14px 14px 10px;
+  margin: 26px 24px 0;
+  padding: 0 4px 12px;
   border-bottom: 1px solid var(--cap-line);
 }
 
 .cap-head h2 {
   flex: 1;
   margin: 0;
-  font-size: 27px;
-  font-weight: 300;
-  letter-spacing: 0.01em;
+  font: 600 19px/1.2 var(--font);
+  letter-spacing: -0.01em;
 }
 
 .cap-head.is-sub {
@@ -147,7 +146,7 @@
   border-radius: 8px;
   background: none;
   color: var(--cap-soft);
-  font: 500 14px/1 var(--font);
+  font: 500 13px/1 var(--font);
   cursor: pointer;
 }
 
@@ -157,7 +156,7 @@
 
 .cap-note {
   flex: none;
-  margin: 12px 41px 0;
+  margin: 12px 28px 0;
   font-size: 13px;
   line-height: 1.45;
   color: var(--cap-soft);
@@ -174,8 +173,8 @@
 }
 
 .cap-empty {
-  margin: 40px 48px;
-  font-size: 15px;
+  margin: 40px 32px;
+  font-size: 14.5px;
   line-height: 1.5;
   color: var(--cap-soft);
 }
@@ -188,13 +187,13 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: 44px;
-  padding: 4px 6px;
+  margin-left: 28px;
+  padding: 4px 8px;
   border: 0;
   border-radius: 10px;
   background: none;
   color: #fff;
-  font: 400 22px/1.2 var(--font);
+  font: 600 14.5px/1.2 var(--font);
   cursor: pointer;
 }
 
@@ -212,12 +211,12 @@
 }
 
 .cap-section-head .flag {
-  font-size: 21px;
+  font-size: 16px;
   line-height: 1;
 }
 
 .cap-section-count {
-  font-size: 14px;
+  font-size: 12.5px;
   color: var(--cap-soft);
 }
 
@@ -234,9 +233,9 @@
   grid-template-columns: 94px 1fr auto;
   align-items: center;
   gap: 12px;
-  margin: 0 30px;
-  padding: 7px 27px 7px 17px;
-  border-radius: 22px;
+  margin: 0 18px;
+  padding: 8px 14px;
+  border-radius: var(--tile-radius);
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -265,8 +264,8 @@
   border: 0;
   border-radius: 8px;
   background: none;
-  color: #4a90d0;
-  font: 400 17px/1.2 var(--font);
+  color: var(--accent);
+  font: 500 13px/1.2 var(--font);
   cursor: pointer;
 }
 
@@ -282,9 +281,9 @@
   height: 70px;
   padding: 0;
   border: 0;
-  border-radius: 22px;
+  border-radius: 12px;
   overflow: hidden;
-  background: #2a2a2a;
+  background: rgba(255, 255, 255, 0.06);
   cursor: zoom-in;
 }
 
@@ -319,9 +318,8 @@
 .capture-text {
   display: grid;
   min-width: 0;
-  font-size: 17px;
-  line-height: 26px;
-  color: rgba(255, 255, 255, 0.95);
+  font: 400 14.5px/22px var(--font);
+  color: #fff;
 }
 
 .capture-text > * {
@@ -389,8 +387,8 @@ button.capture-title:hover {
   width: 20px;
   height: 20px;
   margin: 0;
-  border: 2px solid #fff;
-  border-radius: 3px;
+  border: 1px solid var(--control-line);
+  border-radius: 6px;
   background: none;
   cursor: pointer;
 }
@@ -425,20 +423,19 @@ button.capture-title:hover {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  height: 54px;
-  padding: 0 28px;
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  border-radius: 22px;
-  background: #000;
+  height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--control-line);
+  border-radius: 999px;
+  background: none;
   color: #fff;
-  font: 300 21px/1 var(--font);
-  letter-spacing: 0.01em;
+  font: 500 14.5px/1 var(--font);
   cursor: pointer;
   transition: background 0.15s ease, opacity 0.15s ease, border-color 0.15s ease;
 }
 
 .cap-btn:hover:not(:disabled) {
-  background: #111;
+  background: rgba(255, 255, 255, 0.06);
   border-color: #fff;
 }
 
@@ -448,10 +445,9 @@ button.capture-title:hover {
 }
 
 .cap-btn.is-danger {
-  padding: 0 30px;
-  border-color: rgba(229, 72, 77, 0.65);
-  border-radius: 18px;
-  background: rgba(229, 72, 77, 0.16);
+  padding: 0 20px;
+  border-color: rgba(229, 72, 77, 0.45);
+  background: rgba(229, 72, 77, 0.12);
   color: #ec5a5f;
 }
 
@@ -475,8 +471,7 @@ button.capture-title:hover {
 }
 
 .cap-btn.has-icon {
-  padding: 0 26px 0 20px;
-  border-radius: 24px;
+  padding: 0 20px 0 16px;
 }
 
 .cap-foot.is-confirm {
@@ -505,7 +500,7 @@ button.capture-title:hover {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin: 28px 39px 0 43px;
+  margin: 26px 24px 0;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--cap-line);
 }
@@ -514,17 +509,17 @@ button.capture-title:hover {
   flex: none;
   display: grid;
   place-items: center;
-  width: 55px;
-  height: 55px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--tile-line);
   border-radius: 50%;
+  background: var(--tile);
 }
 
 .upload-head h2 {
   margin: 0;
-  font-size: 27px;
-  font-weight: 400;
-  letter-spacing: 0.01em;
+  font: 600 19px/1.2 var(--font);
+  letter-spacing: -0.01em;
 }
 
 .upload-head h2 small {
@@ -534,10 +529,9 @@ button.capture-title:hover {
 }
 
 .upload-head p {
-  margin: 4px 0 0;
-  font-size: 14px;
-  font-weight: 300;
-  color: rgba(255, 255, 255, 0.82);
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .dropzone {
@@ -548,9 +542,9 @@ button.capture-title:hover {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin: 20px 39px 0 40px;
+  margin: 20px 24px 0;
   padding: 24px;
-  border-radius: 22px;
+  border-radius: var(--tile-radius);
   text-align: center;
   transition: background 0.2s ease;
 }
@@ -574,7 +568,7 @@ button.capture-title:hover {
   width: calc(100% - 2px);
   height: calc(100% - 2px);
   fill: none;
-  stroke: rgba(255, 255, 255, 0.6);
+  stroke: rgba(255, 255, 255, 0.22);
   stroke-width: 1.4;
   stroke-dasharray: 16 10;
   transition: stroke 0.2s ease;
@@ -586,26 +580,23 @@ button.capture-title:hover {
 
 .dz-title {
   margin: 14px 0 0;
-  font-size: 20px;
-  font-weight: 400;
+  font: 600 16px/1.3 var(--font);
 }
 
 .dz-hint {
-  margin: 14px 0 0;
+  margin: 10px 0 0;
   font-size: 13px;
-  font-weight: 300;
-  letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
 }
 
 .dz-browse {
   margin-top: 22px;
-  padding: 10px 22px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 10px;
+  padding: 10px 20px;
+  border: 1px solid var(--control-line);
+  border-radius: 999px;
   background: none;
   color: #fff;
-  font: 300 17px/1.2 var(--font);
+  font: 500 14.5px/1.2 var(--font);
   cursor: pointer;
 }
 
@@ -621,7 +612,7 @@ button.capture-title:hover {
   overscroll-behavior: contain;
   margin: 20px 24px 0;
   padding: 0 16px 8px;
-  border-radius: 22px;
+  border-radius: var(--tile-radius);
 }
 
 .upload-grid {
@@ -636,9 +627,9 @@ button.capture-title:hover {
 .upload-grid li {
   position: relative;
   aspect-ratio: 1;
-  border-radius: 16px;
+  border-radius: var(--tile-radius);
   overflow: hidden;
-  background: #2a2a2a;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .upload-grid img {
@@ -694,8 +685,8 @@ button.capture-title:hover {
   gap: 6px;
   width: 100%;
   height: 100%;
-  border: 1px dashed rgba(255, 255, 255, 0.4);
-  border-radius: 16px;
+  border: 1px dashed var(--tile-line);
+  border-radius: var(--tile-radius);
   background: none;
   color: var(--cap-soft);
   font: 400 13px/1 var(--font);
@@ -704,7 +695,7 @@ button.capture-title:hover {
 
 .tile-add:hover {
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.8);
+  border-color: var(--control-line);
 }
 
 .upload-facts {
@@ -712,15 +703,16 @@ button.capture-title:hover {
   gap: 12px;
   margin: 22px 0 0;
   padding: 16px 18px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--tile-line);
+  border-radius: var(--tile-radius);
+  background: var(--tile);
 }
 
 .upload-facts div {
   display: grid;
   grid-template-columns: 78px 1fr;
   gap: 12px;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.45;
 }
 
@@ -760,7 +752,7 @@ button.capture-title:hover {
 }
 
 .upload .cap-foot {
-  padding-left: 40px;
+  padding-left: 24px;
 }
 
 /* ---------- post details (step 2) ---------- */
@@ -780,7 +772,7 @@ button.capture-title:hover {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 21px 28px 4px 24px;
+  padding: 20px 24px 4px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -790,16 +782,17 @@ button.capture-title:hover {
   display: flex;
   min-height: 150px;
   max-height: 323px;
-  padding: 18px 12px 18px 21px; /* the scrollbar sits inside this padding, clear of the rounded border */
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 28px;
+  padding: 16px 10px 16px 18px; /* the scrollbar sits inside this padding, clear of the rounded border */
+  border: 1px solid var(--tile-line);
+  border-radius: var(--tile-radius);
+  background: var(--tile);
   overflow: hidden;
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .post-photos.is-over {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: #fff;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--field-focus);
 }
 
 .post-photos-scroll {
@@ -826,21 +819,21 @@ button.capture-title:hover {
 .tag-list::-webkit-scrollbar-thumb {
   min-height: 48px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.22);
 }
 
 @supports not selector(::-webkit-scrollbar) {
   .post-photos-scroll,
   .tag-list {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.55) transparent;
+    scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
   }
 }
 
 .post-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 25px 26px;
+  gap: 16px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -849,8 +842,8 @@ button.capture-title:hover {
 .post-grid li {
   position: relative;
   aspect-ratio: 94 / 71;
-  border-radius: 22px;
-  background: #2a2a2a;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .post-grid img,
@@ -858,7 +851,7 @@ button.capture-title:hover {
   display: grid;
   width: 100%;
   height: 100%;
-  border-radius: 22px;
+  border-radius: 12px;
   object-fit: cover;
 }
 
@@ -887,16 +880,16 @@ button.capture-title:hover {
 }
 
 .post-grid .tile-add {
-  border-radius: 22px;
+  border-radius: 12px;
 }
 
 .post-form {
   flex: none;
   display: grid;
   grid-template-columns: 1.13fr 1fr;
-  gap: 29px;
-  margin-top: 26px;
-  padding-left: 7px;
+  gap: 24px;
+  margin-top: 24px;
+  padding-left: 4px;
 }
 
 .post-col {
@@ -906,10 +899,12 @@ button.capture-title:hover {
 }
 
 .post-form h3 {
-  margin: 0 0 14px;
-  font-size: 22px;
-  font-weight: 300;
-  letter-spacing: 0.01em;
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .post-field {
@@ -921,9 +916,10 @@ button.capture-title:hover {
   display: flex;
   flex-direction: column;
   height: 169px;
-  padding: 14px 10px 8px 16px;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 8px;
+  padding: 12px 8px 8px 12px;
+  border: 1px solid var(--tile-line);
+  border-radius: var(--tile-radius);
+  background: var(--tile);
 }
 
 .tag-search {
@@ -931,17 +927,17 @@ button.capture-title:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 41px;
-  margin-right: 24px;
+  height: 38px;
+  margin-right: 16px;
   padding: 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--field-line);
+  border-radius: 999px;
+  color: var(--muted);
   cursor: text;
 }
 
 .tag-search:focus-within {
-  border-color: #fff;
+  border-color: var(--field-focus);
 }
 
 .tag-search input {
@@ -950,12 +946,12 @@ button.capture-title:hover {
   border: 0;
   background: none;
   color: #fff;
-  font: 300 18px/1 var(--font);
+  font: 400 14.5px/1 var(--font);
   outline: none;
 }
 
 .tag-search input::placeholder {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--muted);
 }
 
 .tag-search input::-webkit-search-cancel-button {
@@ -975,8 +971,8 @@ button.capture-title:hover {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 5px 0;
-  font-size: 19px;
+  padding: 6px 0;
+  font-size: 14.5px;
   cursor: pointer;
 }
 
@@ -995,29 +991,29 @@ button.capture-title:hover {
 .tag-check {
   appearance: none;
   flex: none;
-  width: 21px;
-  height: 21px;
+  width: 19px;
+  height: 19px;
   margin: 0;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 4px;
+  border: 1px solid var(--control-line);
+  border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .tag-check:checked {
-  border-color: #3a92d0;
-  background: #3a92d0;
+  border-color: var(--accent);
+  background: var(--accent);
 }
 
 .post-input,
 .post-select {
   width: 100%;
-  height: 38px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: 8px;
-  background: none;
+  height: 42px;
+  border: 1px solid var(--field-line);
+  border-radius: 12px;
+  background: var(--tile);
   color: #fff;
-  font: 400 17px/1 var(--font);
+  font: 400 14.5px/1 var(--font);
   outline: none;
 }
 
@@ -1026,8 +1022,7 @@ button.capture-title:hover {
 }
 
 .post-input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
-  font-weight: 300;
+  color: var(--muted);
 }
 
 .post-field + h3 {
@@ -1043,7 +1038,7 @@ button.capture-title:hover {
 }
 
 .post-select + .post-select {
-  margin-top: 16px;
+  margin-top: 10px;
 }
 
 .post-select:disabled {
@@ -1052,14 +1047,14 @@ button.capture-title:hover {
 }
 
 .post-select option {
-  background: #1c1c1c;
+  background: #161617;
   color: #fff;
 }
 
 .post-input:focus,
 .post-select:focus-visible {
-  border-color: #fff;
-  box-shadow: 0 0 0 1px #fff;
+  border-color: var(--field-focus);
+  box-shadow: none;
 }
 
 .loc-status {
@@ -1067,17 +1062,16 @@ button.capture-title:hover {
   align-items: center;
   gap: 5px;
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.4;
   color: var(--cap-soft);
 }
 
 .cap-btn.is-primary {
-  padding: 0 34px;
-  border-color: #3a92d0;
-  background: #3a92d0;
+  padding: 0 24px;
+  border-color: var(--accent);
+  background: var(--accent);
   font-weight: 600;
-  font-size: 22px;
 }
 
 .cap-btn.is-primary:hover:not(:disabled) {
@@ -1142,11 +1136,11 @@ button.capture-title:hover {
   gap: 8px;
   height: 40px;
   padding: 0 16px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--control-line);
   border-radius: 999px;
   background: none;
   color: #fff;
-  font: 400 14px/1 var(--font);
+  font: 500 13px/1 var(--font);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -1199,7 +1193,7 @@ button.capture-title:hover {
 .viewer-fallback {
   max-width: 36ch;
   padding: 40px 32px;
-  background: #1c1c1c;
+  background: var(--panel);
   text-align: center;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.7);
@@ -1223,7 +1217,7 @@ button.capture-title:hover {
 
 .viewer-nav:hover {
   background: rgba(40, 40, 40, 0.9);
-  border-color: rgba(255, 255, 255, 0.6);
+  border-color: var(--field-focus);
 }
 
 .viewer-nav.is-prev {

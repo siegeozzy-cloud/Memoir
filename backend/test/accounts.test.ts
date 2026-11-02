@@ -156,11 +156,11 @@ test('profile picture: re-encoded to a 512px WebP and served', async () => {
   const r = await app.inject({ method: 'PUT', url: '/api/account/avatar', payload: body, headers: { 'content-type': type, cookie, origin: ORIGIN } })
   assert.equal(r.statusCode, 200, r.body)
   const url = r.json().user.avatarUrl as string
-  assert.match(url, /^\/api\/files\/avatars\/.+\.webp$/)
+  assert.match(url, /^\/api\/files\/avatars\/.+\.jpg$/)
   const file = await app.inject({ method: 'GET', url })
   assert.equal(file.statusCode, 200)
   const meta = await sharp(file.rawPayload).metadata()
-  assert.equal(meta.format, 'webp')
+  assert.equal(meta.format, 'jpeg')
   assert.equal(meta.width, 512)
 
   const fake = multipart('evil.png', 'image/png', Buffer.from('<?php echo "not an image"; ?>'))
