@@ -9,7 +9,7 @@
   z-index: 8;
   top: clamp(16px, 10vh, 103px);
   left: clamp(16px, 6.8vw, 98px);
-  bottom: calc(42px + 59px + 28px + env(safe-area-inset-bottom, 0px)); /* clear of the dock */
+  bottom: calc(42px + 50px + 28px + env(safe-area-inset-bottom, 0px)); /* clear of the dock */
   width: min(574px, calc(100vw - 32px));
   display: flex;
   flex-direction: column;
@@ -1290,7 +1290,7 @@ button.capture-title:hover {
     left: 12px;
     right: 12px;
     width: auto;
-    bottom: calc(24px + 59px + 16px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(24px + 50px + 16px + env(safe-area-inset-bottom, 0px));
     border-radius: 30px;
   }
   .cap-search {

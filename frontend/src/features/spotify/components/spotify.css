@@ -1,89 +1,167 @@
 /* Spotify now-playing tab (top centre), lyrics (left) and the message toast. Linking lives in the profile card.
    Measurements follow the 1440-wide design frame. */
 
+/* The tab rests as a small pill holding the artwork and the name, and opens into the player
+   when the cursor is over it (or it takes focus): it grows, docks to the top edge, and the
+   controls, the scrubber and the times fade in under the name. */
 .np {
-  --hidden-top: 24px; /* sits above the screen so the spring overshoot never shows a gap */
   position: absolute;
   /* below the side panels (8), with the profile and details buttons: a narrow window brings
      Messages and Logged Captures up under this edge and the tab passes behind them. A
      notification (10) still comes over the top — that one is asking for attention. */
   z-index: 7;
-  top: calc(-1 * var(--hidden-top));
+  top: calc(14px + env(safe-area-inset-top, 0px));
   left: 50%;
-  width: min(376px, calc(100vw - 24px));
-  height: calc(107px + var(--hidden-top) + env(safe-area-inset-top, 0px));
-  border: 1px solid var(--line);
-  border-top: 0;
-  border-radius: 0 0 40px 40px;
+  width: min(176px, calc(100vw - 24px));
+  height: 60px;
+  border: 1px solid rgba(29, 185, 84, 0.45);
+  border-radius: 999px;
   background: #000;
   overflow: hidden;
-  transform: translate(-50%, -110%);
+  transform: translate(-50%, -220%);
   visibility: hidden;
   /* opacity so it can fade out of the way of the globe's sunlight panel, which it can't go behind */
-  transition: transform 0.4s cubic-bezier(0.55, 0, 0.75, 0.2), opacity 0.18s ease, visibility 0s linear 0.4s;
+  transition: transform 0.4s cubic-bezier(0.55, 0, 0.75, 0.2), opacity 0.18s ease, visibility 0s linear 0.4s,
+    width 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), height 0.34s cubic-bezier(0.22, 0.9, 0.3, 1),
+    top 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), border-radius 0.34s ease, border-color 0.25s ease;
 }
 
 .np.is-shown {
   transform: translate(-50%, 0);
   visibility: visible;
-  transition: transform 0.55s cubic-bezier(0.22, 1.25, 0.36, 1), opacity 0.18s ease, visibility 0s;
+  transition: transform 0.55s cubic-bezier(0.22, 1.25, 0.36, 1), opacity 0.18s ease, visibility 0s,
+    width 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), height 0.34s cubic-bezier(0.22, 0.9, 0.3, 1),
+    top 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), border-radius 0.34s ease, border-color 0.25s ease;
+}
+
+.np.is-open {
+  top: 0;
+  width: min(196px, calc(100vw - 24px));
+  height: calc(126px + env(safe-area-inset-top, 0px));
+  border-color: rgba(30, 215, 96, 0.9);
+  border-top-color: transparent; /* the tab hangs off the top edge, so its top line is gone */
+  border-radius: 0 0 30px 30px;
+}
+
+.np:focus-visible {
+  outline: none;
+  border-color: #1ed760;
 }
 
 .np-watermark {
   position: absolute;
-  top: calc(var(--hidden-top) - 22px);
-  right: -42px;
+  top: 0;
+  right: -10px;
+  width: 60px;
+  height: 60px;
   color: #1db954;
-  opacity: 0.16;
+  opacity: 0.22;
   --logo-ink: #000;
   pointer-events: none;
+  transition: top 0.34s ease, right 0.34s ease, width 0.34s ease, height 0.34s ease;
+}
+
+.np.is-open .np-watermark {
+  top: calc(22px + env(safe-area-inset-top, 0px));
+  right: -6px;
+  width: 100px;
+  height: 100px;
+}
+
+.np-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 0 20px;
+  transition: padding 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+.np.is-open .np-head {
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 14px 0;
 }
 
 .np-art {
-  position: absolute;
-  top: calc(var(--hidden-top) + 28px + env(safe-area-inset-top, 0px));
-  left: 34px;
-  width: 43px;
-  height: 43px;
+  flex: none;
+  width: 40px;
+  height: 40px;
   border-radius: 9px;
   object-fit: cover;
   background: #222;
 }
 
-.np-main {
-  position: absolute;
-  top: calc(var(--hidden-top) + 28px + env(safe-area-inset-top, 0px));
-  left: 84px;
-  width: min(230px, calc(100% - 118px));
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.np-meta {
+  min-width: 0;
+  flex: 1;
 }
 
 .np-title {
-  max-width: 100%;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 300;
-  line-height: 20px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 19px;
   letter-spacing: 0.01em;
-  white-space: nowrap;
+}
+
+.np-artist {
+  font-size: 12.5px;
+  font-weight: 300;
+  line-height: 17px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+/* ---------- name that slides, when it is too long for the tab ---------- */
+
+.np-scroll {
   overflow: hidden;
-  text-overflow: ellipsis;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.np-scroll-track {
+  display: inline-flex;
+  gap: 32px;
+}
+
+.np-scroll.is-scrolling .np-scroll-track {
+  animation: np-slide linear infinite;
+}
+
+@keyframes np-slide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-1 * var(--shift)));
+  }
+}
+
+/* ---------- the part that only shows while the tab is open ---------- */
+
+.np-fold {
+  padding: 2px 14px 4px;
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.22s ease;
+}
+
+.np.is-open .np-fold {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity 0.22s ease 0.08s, transform 0.26s ease 0.08s;
 }
 
 .np-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
+  justify-content: space-between;
 }
 
 .np-btn {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 28px;
+  width: 28px;
+  height: 26px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -106,14 +184,14 @@
 }
 
 .np-play {
-  width: 32px;
+  width: 30px;
 }
 
 .np-bar {
   position: relative;
   width: 100%;
-  height: 12px;
-  margin-top: 1px;
+  height: 10px;
+  margin-top: 2px;
   cursor: pointer;
 }
 
@@ -156,8 +234,8 @@
   display: flex;
   justify-content: space-between;
   width: 100%;
-  margin-top: 1px;
-  font-size: 9px;
+  margin-top: 2px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, 0.6);
 }
@@ -269,7 +347,7 @@
   .np {
     --np-scale: 0.82;
     transform-origin: top center;
-    transform: translate(-50%, -110%) scale(var(--np-scale));
+    transform: translate(-50%, -220%) scale(var(--np-scale));
   }
   .np.is-shown {
     transform: translate(-50%, 0) scale(var(--np-scale));
@@ -285,7 +363,7 @@
 .sp-toast {
   position: absolute;
   z-index: 11;
-  top: calc(118px + env(safe-area-inset-top, 0px));
+  top: calc(134px + env(safe-area-inset-top, 0px)); /* clear of the tab at its open height */
   left: 50%;
   max-width: calc(100vw - 32px);
   margin: 0;
@@ -301,8 +379,16 @@
 
 
 @media (prefers-reduced-motion: reduce) {
+  .np-scroll.is-scrolling .np-scroll-track {
+    animation: none;
+  }
+
   .np,
   .np.is-shown,
+  .np-head,
+  .np-watermark,
+  .np-fold,
+  .np.is-open .np-fold,
   .lyrics,
   .lyrics.is-shown,
   .lyrics-lines {

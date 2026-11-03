@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { usePlaybackPosition, type SpotifyApi } from '../useSpotify'
 import { LyricsIcon, NextIcon, PauseIcon, PlayIcon, PrevIcon, RepeatIcon, SpotifyLogo } from './icons'
 
@@ -9,12 +9,51 @@ const mmss = (ms: number) => {
 
 const REPEAT_LABEL = { off: 'Repeat: off', context: 'Repeat: on', track: 'Repeat: this song' } as const
 
-// The top-centre tab from the design, while Spotify is linked and something is playing.
+/** Marquee: px a second, and the empty run between the text and its copy. */
+const SCROLL_SPEED = 38
+const SCROLL_GAP = 32
+
+// A line that slides right-to-left, on a loop, when the name is too long for the tab. Short
+// names sit still. The copy behind it makes the wrap-around seamless.
+function Scroller({ className, text }: { className: string; text: string }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [shift, setShift] = useState(0)
+
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    const measure = () => {
+      const first = el.firstElementChild?.firstElementChild as HTMLElement | undefined
+      if (!first) return
+      // the first copy keeps its natural width whether or not the copy is there, so this is stable
+      setShift(first.scrollWidth - el.clientWidth > 1 ? first.scrollWidth + SCROLL_GAP : 0)
+    }
+    measure()
+    const ro = new ResizeObserver(measure) // the tab is narrower while collapsed
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [text])
+
+  const style = { '--shift': `${shift}px`, animationDuration: `${shift / SCROLL_SPEED}s` } as CSSProperties
+
+  return (
+    <div className={`np-scroll ${className}${shift ? ' is-scrolling' : ''}`} ref={box} title={text}>
+      <span className="np-scroll-track" style={shift ? style : undefined}>
+        <span>{text}</span>
+        {shift > 0 && <span aria-hidden="true">{text}</span>}
+      </span>
+    </div>
+  )
+}
+
+// The top-centre tab from the design, while Spotify is linked and something is playing. It rests
+// as a small pill with the artwork and the name, and opens into the full player under the cursor.
 // It steps aside (slides up) while a notification uses the same spot.
 export default function NowPlaying({ spotify, hidden }: { spotify: SpotifyApi; hidden: boolean }) {
   const { playback: p } = spotify
   const pos = usePlaybackPosition(p)
   const bar = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
   const pct = p ? (pos / p.track.durationMs) * 100 : 0
   const shown = !!p && !hidden
 
@@ -25,15 +64,32 @@ export default function NowPlaying({ spotify, hidden }: { spotify: SpotifyApi; h
   }
 
   return (
-    <section className={`np${shown ? ' is-shown' : ''}`} aria-label="Now playing on Spotify" aria-hidden={!shown} inert={!shown}>
+    <section
+      className={`np${shown ? ' is-shown' : ''}${open && shown ? ' is-open' : ''}`}
+      aria-label="Now playing on Spotify"
+      aria-hidden={!shown}
+      inert={!shown}
+      // the pill itself takes focus, which opens it: the controls inside are out of the tab
+      // order until then, so nobody lands on a button they can't see
+      tabIndex={shown ? 0 : -1}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false)
+      }}
+    >
       {p && (
         <>
-          <SpotifyLogo className="np-watermark" size={150} />
-          {p.track.artUrl ? <img className="np-art" src={p.track.artUrl} alt="" /> : <span className="np-art" />}
-          <div className="np-main">
-            <p className="np-title" title={`${p.track.artists} - ${p.track.title}`}>
-              {p.track.artists} - {p.track.title}
-            </p>
+          <SpotifyLogo className="np-watermark" size={100} />
+          <div className="np-head">
+            {p.track.artUrl ? <img className="np-art" src={p.track.artUrl} alt="" /> : <span className="np-art" />}
+            <div className="np-meta">
+              <Scroller className="np-title" text={p.track.title} />
+              <Scroller className="np-artist" text={p.track.artists} />
+            </div>
+          </div>
+          <div className="np-fold" inert={!open}>
             <div className="np-controls">
               <button
                 type="button"
@@ -43,16 +99,16 @@ export default function NowPlaying({ spotify, hidden }: { spotify: SpotifyApi; h
                 title={spotify.lyricsOn ? 'Hide lyrics' : 'Show lyrics'}
                 onClick={spotify.toggleLyrics}
               >
-                <LyricsIcon />
+                <LyricsIcon size={17} />
               </button>
               <button type="button" className="np-btn" aria-label="Previous" title="Previous" onClick={spotify.previous}>
-                <PrevIcon />
+                <PrevIcon size={16} />
               </button>
               <button type="button" className="np-btn np-play" aria-label={p.isPlaying ? 'Pause' : 'Play'} title={p.isPlaying ? 'Pause' : 'Play'} onClick={spotify.togglePlay}>
-                {p.isPlaying ? <PauseIcon /> : <PlayIcon />}
+                {p.isPlaying ? <PauseIcon size={21} /> : <PlayIcon size={21} />}
               </button>
               <button type="button" className="np-btn" aria-label="Next" title="Next" onClick={spotify.next}>
-                <NextIcon />
+                <NextIcon size={16} />
               </button>
               <button
                 type="button"
@@ -61,7 +117,7 @@ export default function NowPlaying({ spotify, hidden }: { spotify: SpotifyApi; h
                 title={REPEAT_LABEL[p.repeat]}
                 onClick={spotify.cycleRepeat}
               >
-                <RepeatIcon one={p.repeat === 'track'} />
+                <RepeatIcon size={17} one={p.repeat === 'track'} />
               </button>
             </div>
             <div
