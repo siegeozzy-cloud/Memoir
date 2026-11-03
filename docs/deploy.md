@@ -56,7 +56,7 @@ the server.
    | `DATABASE_URL` | the Neon string from step 1 |
    | `CLOUDINARY_URL` | the Cloudinary string from step 2 |
    | `TOKEN_KEY` | run `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
-   | `API_URL` | `https://memoir-api.onrender.com` (Render shows the real one; fill it in after the first deploy) |
+   | `API_URL` | `https://memoir-api-zm7v.onrender.com` — Render adds a random suffix of its own, so take the address from its dashboard rather than guessing it |
    | `APP_URL` | `https://memoir-album.vercel.app` |
    | `BREVO_API_KEY`, `MAIL_FROM` | see step 6 — leave empty to start |
    | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | from your Spotify app |
@@ -76,30 +76,37 @@ else uses it daily.
 In Vercel → your project → **Settings → Environment Variables**:
 
 ```
-VITE_API_URL = https://memoir-api.onrender.com
+VITE_API_URL = https://memoir-api-zm7v.onrender.com
 ```
 
 Add it for Production (and Preview, if you want branch builds to work), then redeploy. Vite only reads
 variables at build time, so a redeploy is required — changing it without one does nothing.
 
-**If your API is not at `memoir-api.onrender.com`, one more file has to say so.** The app is served
-with a Content-Security-Policy, which lists the addresses a browser is allowed to load from — and the
-API has to be on that list, or every call from the deployed app is blocked and the console fills with
-"Refused to connect". The address appears in two places:
+**If the API ever moves, two more files have to say so.** The app is served with a
+Content-Security-Policy, which lists the addresses a browser is allowed to load from. The API has to be
+on that list, or every call from the deployed app is blocked and the console fills with
 
-- `frontend/security-headers.ts` — `API_ORIGIN` at the top
-- `frontend/vercel.json` — inside the long `Content-Security-Policy` value, twice (`https://…` and
-  `wss://…`)
+> Refused to connect … because it violates the document's Content Security Policy
 
-Change the first, run `npm run build` in `frontend`, and the build fails with the exact value to paste
-into the second. That check is there so the two can't quietly drift apart.
+The address is written in:
+
+- `frontend/security-headers.ts` — `API_ORIGIN` at the top, the one place to change
+- `frontend/vercel.json` — four times inside the long `Content-Security-Policy` value (`connect-src`
+  as both `https://…` and `wss://…`, then `img-src` and `media-src`), because a host sets headers
+  before any build runs and so can't work them out
+
+Change `API_ORIGIN`, run `npm run build` in `frontend`, and the build fails with the exact value to
+paste into `vercel.json`. That check is there so the two can't quietly drift apart.
+
+Both currently read `https://memoir-api-zm7v.onrender.com`, which is the suffixed address Render gave
+the service — not the `memoir-api.onrender.com` that `render.yaml`'s service name suggests.
 
 ## 5. Spotify
 
 In the Spotify dashboard, open your app's settings and **add a second redirect URI**:
 
 ```
-https://memoir-api.onrender.com/api/spotify/callback
+https://memoir-api-zm7v.onrender.com/api/spotify/callback
 ```
 
 Keep the `http://127.0.0.1:5173/api/spotify/callback` one so local development still works. Spotify

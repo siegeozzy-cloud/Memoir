@@ -20,7 +20,7 @@
  * **Change this if your API is somewhere else**, and change `vercel.json` to match. It is the value
  * `VITE_API_URL` is set to on Vercel.
  */
-export const API_ORIGIN = 'https://memoir-api.onrender.com'
+export const API_ORIGIN = 'https://memoir-api-zm7v.onrender.com'
 const API_SOCKET = API_ORIGIN.replace(/^http/, 'ws')
 
 const GOOGLE_FONT_CSS = 'https://fonts.googleapis.com'
