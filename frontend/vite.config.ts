@@ -52,9 +52,30 @@ function checkDeployedHeaders(): Plugin {
   }
 }
 
+/**
+ * The app asks the API who you are (/api/auth/session) as soon as React boots, and in production the
+ * API is a different site — so the browser only starts the DNS lookup and TLS handshake for it after
+ * the bundle has parsed. Telling it the origin up front overlaps that handshake with the bundle
+ * download, which Lighthouse measured as ~200 ms off LCP.
+ *
+ * `crossorigin` matters: the session call is a CORS request, and a connection opened without it
+ * would not be the one that call reuses. Nothing is emitted when VITE_API_URL is unset, which is the
+ * development case — there the API is behind this server's own /api proxy, already on this origin.
+ */
+function preconnectApi(): Plugin {
+  return {
+    name: 'memoir:preconnect-api',
+    transformIndexHtml(_html, { server }) {
+      const url = process.env.VITE_API_URL?.replace(/\/$/, '')
+      if (server || !url) return []
+      return [{ tag: 'link', attrs: { rel: 'preconnect', href: url, crossorigin: '' }, injectTo: 'head-prepend' }]
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), securityHeaders(), checkDeployedHeaders()],
+  plugins: [react(), securityHeaders(), checkDeployedHeaders(), preconnectApi()],
   server: {
     // Spotify only redirects to the loopback IP (not "localhost"), and its redirect URI is
     // http://127.0.0.1:5173/api/spotify/callback, so the dev server must be exactly there.

@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "//sideEffects": "Nothing here is imported purely to make it run, except the stylesheets — so the bundler may drop a module whose exports go unused. Without this the mock services survived a production build, because `export const mockChatService = new MockChatService()` is a top-level call the bundler cannot prove is harmless to remove, and that pulled the whole in-browser fake backend (~45 KB) into the bundle real users download. The .css entry is not optional: those imports exist only for their side effect, and an unqualified `false` would drop the app's styles.",
+  "sideEffects": [
+    "**/*.css"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

@@ -23,8 +23,6 @@
 export const API_ORIGIN = 'https://memoir-api-zm7v.onrender.com'
 const API_SOCKET = API_ORIGIN.replace(/^http/, 'ws')
 
-const GOOGLE_FONT_CSS = 'https://fonts.googleapis.com'
-const GOOGLE_FONT_FILES = 'https://fonts.gstatic.com'
 /** Photos and videos once CLOUDINARY_URL is set on the backend. */
 const CLOUDINARY = 'https://res.cloudinary.com'
 /** Album art on Now Playing comes straight from Spotify's own picture hosts. */
@@ -50,8 +48,8 @@ export function appCsp({ dev }: { dev: boolean }) {
   return join([
     "default-src 'self'",
     dev ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
-    `style-src 'self' 'unsafe-inline' ${GOOGLE_FONT_CSS}`,
-    `font-src 'self' ${GOOGLE_FONT_FILES}`,
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     `img-src 'self' data: blob: ${API_ORIGIN} ${CLOUDINARY} ${SPOTIFY_ART.join(' ')}`,
     `media-src 'self' blob: ${API_ORIGIN} ${CLOUDINARY}`,
     `connect-src 'self' ${API_ORIGIN} ${API_SOCKET} ${LYRICS}${dev ? ' ws: wss:' : ''}`,
@@ -78,8 +76,8 @@ export function globeCsp({ dev }: { dev: boolean }) {
   return join([
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline' ${CDN}`,
-    `style-src 'self' 'unsafe-inline' ${GOOGLE_FONT_CSS}`,
-    `font-src 'self' ${GOOGLE_FONT_FILES}`,
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     `img-src 'self' data: blob: ${TILES}`,
     `connect-src 'self' ${TILES}${dev ? ' ws: wss:' : ''}`,
     // maplibre-gl runs its tile decoding in a worker it builds from a blob
