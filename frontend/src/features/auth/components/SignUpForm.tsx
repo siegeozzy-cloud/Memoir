@@ -4,7 +4,7 @@ import { BLOCKED, cleanEmail, cleanName, cleanPassword, emailProblem, nameProble
 import { Check, Field, PasswordField } from './fields'
 import { ArrowRightIcon, MailIcon, UserIcon } from './icons'
 import { passwordStrength } from './strength'
-import TermsDialog from './TermsDialog'
+import TermsDialog from '../../../shared/components/TermsDialog'
 
 type Props = {
   onSubmit: (input: SignUpInput) => Promise<SignUpResult>

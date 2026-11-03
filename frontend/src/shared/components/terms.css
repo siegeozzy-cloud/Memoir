@@ -127,6 +127,11 @@
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
+/* nothing to agree to: the one button sits on the right on its own */
+.terms-foot.is-reading {
+  justify-content: flex-end;
+}
+
 .terms-hint {
   margin: 0;
   font-size: 13px;

@@ -6,6 +6,7 @@ import type { PresenceStatus, User } from '../../../shared/types'
 import Avatar from '../../../shared/components/Avatar'
 import { SpotifyLogo } from '../../spotify/components/icons'
 import StatusGlyph from '../../../shared/components/StatusGlyph'
+import TermsDialog from '../../../shared/components/TermsDialog'
 import { CameraIcon, CheckIcon, ChevronIcon, CopyIcon, SignOutIcon } from './icons'
 
 type Props = {
@@ -34,6 +35,7 @@ const NOTIFICATIONS: { key: keyof NotificationPrefs; label: string }[] = [
 export default function ProfileCard({ profile, update, email, spotify, onSignOut, onDeactivate, onDelete }: Props) {
   const { user } = profile
   const [error, setError] = useState('')
+  const [terms, setTerms] = useState(false)
   // the change shows at once; if the server refuses it, it goes back and the reason shows under the name
   const save = (patch: ProfilePatch) => {
     setError('')
@@ -107,8 +109,8 @@ export default function ProfileCard({ profile, update, email, spotify, onSignOut
 
       <section className="pf-section">
         <div className="pf-card">
-          {/* TODO: the terms page (shared with the sign-up form's link) */}
-          <button type="button" className="pf-row is-action">
+          {/* the same text the sign-up form shows, for reading: agreeing happened back then */}
+          <button type="button" className="pf-row is-action" onClick={() => setTerms(true)}>
             <span>Terms and Agreements</span>
             <ChevronIcon />
           </button>
@@ -118,6 +120,8 @@ export default function ProfileCard({ profile, update, email, spotify, onSignOut
           </button>
         </div>
       </section>
+
+      {terms && <TermsDialog onClose={() => setTerms(false)} />}
 
       <AccountActions
         onDeactivate={async () => {

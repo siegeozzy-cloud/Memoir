@@ -37,7 +37,7 @@ src/
     spotify/    Now playing, controls, lyrics
     globe/      GlobeView: the bridge to the 3D globe page
     home/       Dock, fun facts, notification tab, details toggle
-  shared/       Used across features: components (Avatar, StatusGlyph), hooks, lib (places, time, presence…), types.ts
+  shared/       Used across features: components (Avatar, StatusGlyph, TermsDialog), hooks, lib (places, time, presence…), types.ts
   mocks/        Mock people shared by the mock services
   assets/       Logos and placeholder images
 public/
@@ -71,9 +71,10 @@ and the server checks the same thing again, because nothing here is trusted ther
 deliberate exception: every printable character is allowed, since banning punctuation only makes a
 password easier to guess.
 
-The **Terms and Agreements** are `features/auth/components/terms.ts`, shown by `TermsDialog` when
-someone signs up; the Agree button stays out of reach until the text has been scrolled to the end.
-Bump `TERMS_VERSION` when the wording changes.
+The **Terms and Agreements** are `shared/components/terms.ts`, shown by `shared/components/TermsDialog`
+from two places: the sign-up form, where passing `onAgree` adds the Agree button — out of reach until
+the text has been scrolled to the end — and the profile card, which leaves `onAgree` out and shows the
+same text for reading. Bump `TERMS_VERSION` when the wording changes.
 
 ## Spotify
 

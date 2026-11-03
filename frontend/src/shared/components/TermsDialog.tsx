@@ -1,29 +1,36 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CloseIcon } from '../../chat/components/icons'
+import { CloseIcon } from '../../features/chat/components/icons'
 import { TERMS, TERMS_UPDATED } from './terms'
 import './terms.css'
 
 type Props = {
-  /** Whether the box on the form is already ticked; the button says so. */
-  agreed: boolean
-  /** Ticks the box on the sign-up form and closes. Only offered once the text has been read to the end. */
-  onAgree: () => void
+  /**
+   * Signing up: ticks the box on the form and closes. Only offered once the text has been read to
+   * the end. Leave it out to show the terms for reading — which is what the profile does, where
+   * agreeing happened long ago.
+   */
+  onAgree?: () => void
+  /** Whether the box on the sign-up form is already ticked; the button says so. Ignored when reading. */
+  agreed?: boolean
   onClose: () => void
 }
 
 /**
- * The Terms and Agreements, over the sign-up form. The Agree button stays out of reach until the
- * text has been scrolled to the end, so nobody agrees to something they never saw.
+ * The Terms and Agreements. Two ways in, one text: the sign-up form, where agreeing to them is the
+ * point, and the profile, where they are only being looked up again.
+ *
+ * When there is something to agree to, the Agree button stays out of reach until the text has been
+ * scrolled to the end, so nobody agrees to something they never saw.
  *
  * Focus is moved into the dialog and kept there while it is open: Escape closes it, Tab cycles
- * inside it, and the form behind can't be typed into. On the way out, focus goes back where it was.
+ * inside it, and whatever is behind can't be typed into. On the way out, focus goes back where it was.
  *
- * It hangs off <body> rather than off the form, because the card it would otherwise sit inside is
- * animated, and an animated transform makes a containing block that a fixed overlay can't escape —
- * the dialog would be squeezed into the width of the column beside the porthole.
+ * It hangs off <body> rather than off its caller, because the cards it opens over are animated, and
+ * an animated transform makes a containing block that a fixed overlay can't escape — the dialog
+ * would be squeezed into the width of the column it was opened from.
  */
-export default function TermsDialog({ agreed, onAgree, onClose }: Props) {
+export default function TermsDialog({ onAgree, agreed = false, onClose }: Props) {
   const dialog = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const [read, setRead] = useState(agreed)
@@ -94,17 +101,22 @@ export default function TermsDialog({ agreed, onAgree, onClose }: Props) {
           ))}
         </div>
 
-        <footer className="terms-foot">
-          <p className="terms-hint" role="status">
-            {read ? 'That’s all of it.' : 'Scroll to the end to agree.'}
-          </p>
+        {/* reading them again needs no hint and no second button: just a way out */}
+        <footer className={`terms-foot${onAgree ? '' : ' is-reading'}`}>
+          {onAgree && (
+            <p className="terms-hint" role="status">
+              {read ? 'That’s all of it.' : 'Scroll to the end to agree.'}
+            </p>
+          )}
           <div className="terms-actions">
-            <button type="button" className="terms-quiet" onClick={onClose}>
-              Close
+            <button type="button" className={onAgree ? 'terms-quiet' : 'terms-agree'} onClick={onClose}>
+              {onAgree ? 'Close' : 'Done'}
             </button>
-            <button type="button" className="terms-agree" disabled={!read} onClick={onAgree}>
-              {agreed ? 'Keep agreed' : 'I agree'}
-            </button>
+            {onAgree && (
+              <button type="button" className="terms-agree" disabled={!read} onClick={onAgree}>
+                {agreed ? 'Keep agreed' : 'I agree'}
+              </button>
+            )}
           </div>
         </footer>
       </div>
