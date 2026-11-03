@@ -9,7 +9,7 @@ import { hashToken, newToken, newUniqueId } from '../../lib/crypto.ts'
 import { HttpError, parse } from '../../lib/errors.ts'
 import { sendMail } from '../../lib/mailer.ts'
 import { endAllSessions, endSession, startSession } from '../../lib/session.ts'
-import { emailSchema, nameSchema, passwordSchema } from '../../lib/validation.ts'
+import { emailSchema, existingPasswordSchema, linkTokenSchema, nameSchema, passwordSchema } from '../../lib/validation.ts'
 import { alreadyRegistered, resetEmail, verifyEmail } from './emails.ts'
 import { sessionOf } from './users.ts'
 
@@ -19,10 +19,12 @@ const SignUp = z.object({
   password: passwordSchema,
   acceptedTerms: z.boolean().refine((v) => v, 'Agree to the Terms and Agreements to continue.'),
 })
-const SignIn = z.object({ email: emailSchema, password: z.string('Enter your password.').min(1, 'Enter your password.').max(128), remember: z.boolean().default(false) })
+const SignIn = z.object({ email: emailSchema, password: existingPasswordSchema, remember: z.boolean().default(false) })
 const Resend = z.object({ email: emailSchema })
 const Forgot = z.object({ email: emailSchema })
-const ResetPassword = z.object({ token: z.string('That link doesn’t work anymore.').min(1, 'That link doesn’t work anymore.'), password: passwordSchema })
+const ResetPassword = z.object({ token: linkTokenSchema, password: passwordSchema })
+/** The token on a /verify or /reset link, checked before it is looked up. */
+const LinkQuery = z.object({ token: linkTokenSchema })
 
 /** Without Brevo or a mail server the link is printed in the backend's terminal, so say so rather than "check your inbox". */
 const delivery = () => (config.mailConfigured ? 'email' : ('console' as const))
@@ -124,9 +126,10 @@ export default async function authRoutes(app: FastifyInstance) {
 
   /** The link in the confirmation email. Lands back on the sign-in screen with the result. */
   app.get('/verify', async (req, reply) => {
-    const { token } = req.query as { token?: string }
     const back = (result: string) => reply.redirect(`${config.appOrigin}/?verified=${result}`)
-    if (!token) return back('invalid')
+    const link = LinkQuery.safeParse(req.query)
+    if (!link.success) return back('invalid') // missing, or not the shape of a token at all
+    const { token } = link.data
     const row = await db.query.emailTokens.findFirst({ where: and(eq(emailTokens.id, hashToken(token)), eq(emailTokens.purpose, 'verify')) })
     if (!row) return back('invalid')
     if (row.expiresAt < new Date()) {
@@ -165,9 +168,10 @@ export default async function authRoutes(app: FastifyInstance) {
    * below or the token itself — a token is 43 random characters, so the two can't be confused.
    */
   app.get('/reset', async (req, reply) => {
-    const { token } = req.query as { token?: string }
     const back = (result: string) => reply.redirect(`${config.appOrigin}/?reset=${encodeURIComponent(result)}`)
-    if (!token) return back('invalid')
+    const link = LinkQuery.safeParse(req.query)
+    if (!link.success) return back('invalid') // missing, or not the shape of a token at all
+    const { token } = link.data
     const row = await db.query.emailTokens.findFirst({ where: and(eq(emailTokens.id, hashToken(token)), eq(emailTokens.purpose, 'reset')) })
     if (!row) return back('invalid')
     if (row.expiresAt < new Date()) {

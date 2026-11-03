@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react'
 import { AuthError, type SignInInput } from '../service'
+import { BLOCKED, cleanEmail, cleanPassword, emailProblem, passwordProblem, type Cleaned } from '../validation'
 import { Check, Field, PasswordField } from './fields'
 import { ArrowRightIcon, MailIcon } from './icons'
 
@@ -21,9 +22,22 @@ export default function SignInForm({ onSubmit, onForgot, notice, autoFocus }: Pr
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<AuthError | null>(null)
 
+  /** Keeps a box to the characters its field allows, and says so the moment one is refused. */
+  const typed = (field: 'email' | 'password', raw: string, clean: (raw: string) => Cleaned, set: (v: string) => void) => {
+    const { value, blocked } = clean(raw)
+    set(value)
+    if (blocked) setError(new AuthError(BLOCKED[field], field))
+    else if (error?.field === field) setError(null)
+  }
+
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (busy) return
+    // checked here as well as at the server, so a typo doesn't cost a round trip or a rate-limit try
+    const problem =
+      (emailProblem(email) && new AuthError(emailProblem(email)!, 'email')) ||
+      (passwordProblem(password, { existing: true }) && new AuthError(passwordProblem(password, { existing: true })!, 'password'))
+    if (problem) return setError(problem)
     setBusy(true)
     setError(null)
     try {
@@ -58,8 +72,9 @@ export default function SignInForm({ onSubmit, onForgot, notice, autoFocus }: Pr
         autoCapitalize="off"
         spellCheck={false}
         placeholder="you@example.com"
+        maxLength={254}
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        onChange={(e) => typed('email', e.target.value, cleanEmail, setEmail)}
         aria-invalid={error?.field === 'email' || undefined}
         autoFocus={autoFocus}
       />
@@ -68,8 +83,9 @@ export default function SignInForm({ onSubmit, onForgot, notice, autoFocus }: Pr
         label="Password"
         autoComplete="current-password"
         placeholder="Enter your password"
+        maxLength={128}
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        onChange={(e) => typed('password', e.target.value, cleanPassword, setPassword)}
         aria-invalid={error?.field === 'password' || undefined}
       />
 

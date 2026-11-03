@@ -44,11 +44,36 @@ public/
   globe/        The Blue Marble globe (Three.js + MapLibre), run in an iframe
 ```
 
+## Security headers
+
+`security-headers.ts` is the one place the app's Content-Security-Policy and its neighbours are
+written. The dev server serves them through a plugin in `vite.config.ts`, so a policy problem shows up
+in the browser console here rather than after a deploy; `vercel.json` repeats them for production,
+because a host sets headers before any build runs, and `npm run build` fails if the two have drifted
+apart. Changing where the API lives means changing `API_ORIGIN` in both — see
+[docs/deploy.md](../docs/deploy.md#4-point-the-web-app-at-the-api).
+
+The policy allows no inline script at all, which is what makes an injected `<script>` or `onerror=`
+inert, and `frame-ancestors 'self'`, which stops another site framing Memoir and laying its own
+buttons over the top. `public/globe/` gets a separate, looser policy of its own: it is one long inline
+script and loads Three.js and MapLibre from a CDN, so it would otherwise force the whole app's rules
+open.
+
 ## Sign in
 
 Sign-up emails a confirmation link (printed in the backend's terminal while it has no email server set up); sign-in works once
 it's been opened. "Keep me signed in" keeps the session for 30 days; otherwise it ends with the browser. **Sign out** is in the
 profile card (or press **L** on the home screen in dev builds). With `VITE_API=mock`, any email and password signs you in.
+
+`features/auth/validation.ts` is what the boxes accept: an allowlist per field, mirroring
+`backend/src/lib/validation.ts`, so a character with no business in a field never leaves the browser —
+and the server checks the same thing again, because nothing here is trusted there. Passwords are the
+deliberate exception: every printable character is allowed, since banning punctuation only makes a
+password easier to guess.
+
+The **Terms and Agreements** are `features/auth/components/terms.ts`, shown by `TermsDialog` when
+someone signs up; the Agree button stays out of reach until the text has been scrolled to the end.
+Bump `TERMS_VERSION` when the wording changes.
 
 ## Spotify
 

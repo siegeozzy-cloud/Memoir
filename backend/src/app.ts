@@ -18,6 +18,7 @@ import { startActivityPolling } from './features/spotify/activity.ts'
 import spotifyRoutes from './features/spotify/routes.ts'
 import { errorHandler, HttpError } from './lib/errors.ts'
 import { onDisconnect, registerRealtime } from './lib/realtime.ts'
+import { registerSecurityHeaders } from './lib/security.ts'
 import { registerSessions } from './lib/session.ts'
 
 export async function buildApp() {
@@ -34,6 +35,8 @@ export async function buildApp() {
   })
 
   app.setErrorHandler(errorHandler)
+  // first, so every answer below — routes, static files, errors — carries them
+  registerSecurityHeaders(app)
   await app.register(cookie)
   // The app and the API are on different addresses in production, so the browser asks permission first.
   await app.register(cors, {

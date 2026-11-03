@@ -101,7 +101,15 @@ Two settings change how it behaves away from your machine:
 - **Email confirmation:** single-use links, valid 24 hours, stored hashed. Signing up again on an unconfirmed address replaces
   its details and voids older links, so whoever reads the inbox decides.
 - **Input:** every request is validated (zod) and every query is parameterised (Drizzle), which is what stops SQL injection.
-  Passwords can contain any characters; names allow letters from any language, spaces, `'`, `-` and `.`.
+  On top of that, `lib/validation.ts` gives each field an allowlist of the characters it genuinely needs, so a value can't
+  carry a payload on towards a log line, a mail header or a page: emails allow letters, digits and `.` `_` `+` `-`; names
+  allow letters from any language, spaces, `'`, `-` and `.`; link tokens are base64url only. Passwords are the deliberate
+  exception — every printable character in any script is allowed (only invisible ones are refused), because banning
+  punctuation would just make them easier to guess, and a password is hashed on arrival and never put into a query or a page.
+- **Headers:** every answer carries `Content-Security-Policy: default-src 'none'` (an API answer is never a page, so it may
+  load nothing), `X-Frame-Options: DENY` and `frame-ancestors 'none'` against clickjacking, `nosniff`, `no-referrer`, a
+  closed `Permissions-Policy`, and HSTS in production — see `lib/security.ts`. The web app has its own, larger policy in
+  `frontend/security-headers.ts`.
 - **Rate limits:** 300 requests a minute per address overall; sign-up 5, sign-in 10, new links 3, picture uploads 10.
 - **Cross-site requests:** changes are only accepted from the app's own origin (`APP_URL`).
 - **Uploads:** pictures are decoded and re-encoded, which strips EXIF (including GPS); anything that isn't an image is refused.

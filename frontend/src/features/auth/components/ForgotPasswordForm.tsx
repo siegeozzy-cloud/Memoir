@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react'
 import { AuthError, type ForgotResult } from '../service'
+import { BLOCKED, cleanEmail, emailProblem } from '../validation'
 import { Field } from './fields'
 import { ArrowRightIcon, MailIcon } from './icons'
 
@@ -20,9 +21,19 @@ export default function ForgotPasswordForm({ onSubmit, onBack, autoFocus }: Prop
   const [error, setError] = useState<AuthError | null>(null)
   const [sent, setSent] = useState<ForgotResult | null>(null)
 
+  /** Keeps the box to the characters an address allows, and says so the moment one is refused. */
+  const typed = (raw: string) => {
+    const { value, blocked } = cleanEmail(raw)
+    setEmail(value)
+    setError(blocked ? new AuthError(BLOCKED.email, 'email') : null)
+  }
+
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (busy) return
+    // only three tries a minute reach the server, so a typo is caught here first
+    const problem = emailProblem(email)
+    if (problem) return setError(new AuthError(problem, 'email'))
     setBusy(true)
     setError(null)
     try {
@@ -51,8 +62,9 @@ export default function ForgotPasswordForm({ onSubmit, onBack, autoFocus }: Prop
         autoCapitalize="off"
         spellCheck={false}
         placeholder="you@example.com"
+        maxLength={254}
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        onChange={(e) => typed(e.target.value)}
         aria-invalid={error?.field === 'email' || undefined}
         disabled={!!sent}
         autoFocus={autoFocus}

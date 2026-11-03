@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react'
 import { AuthError, type ResetInput } from '../service'
+import { BLOCKED, cleanPassword, passwordProblem } from '../validation'
 import { PasswordField } from './fields'
 import { ArrowRightIcon } from './icons'
 import { passwordStrength } from './strength'
@@ -25,9 +26,22 @@ export default function ResetPasswordForm({ token, onSubmit, onDone, onBack }: P
   const [error, setError] = useState<AuthError | null>(null)
   const strength = passwordStrength(password)
 
+  /** Keeps a box free of invisible characters; everything printable is allowed in a password. */
+  const typed = (field: 'password' | 'confirm', raw: string, set: (v: string) => void) => {
+    const { value, blocked } = cleanPassword(raw)
+    set(value)
+    if (blocked) setError(new AuthError(BLOCKED.password, field))
+    else if (error?.field === field) setError(null)
+  }
+
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (busy) return
+    const problem = passwordProblem(password)
+    if (problem) {
+      setError(new AuthError(problem, 'password'))
+      return
+    }
     if (password !== confirm) {
       setError(new AuthError('Those two passwords don’t match.', 'confirm'))
       return
@@ -56,8 +70,9 @@ export default function ResetPasswordForm({ token, onSubmit, onDone, onBack }: P
         label="New password"
         autoComplete="new-password"
         placeholder="At least 8 characters"
+        maxLength={128}
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        onChange={(e) => typed('password', e.target.value, setPassword)}
         aria-invalid={error?.field === 'password' || undefined}
         aria-describedby={`${id}-strength`}
         autoFocus
@@ -79,8 +94,9 @@ export default function ResetPasswordForm({ token, onSubmit, onDone, onBack }: P
         label="Confirm new password"
         autoComplete="new-password"
         placeholder="Type it once more"
+        maxLength={128}
         value={confirm}
-        onChange={(e) => setConfirm(e.target.value)}
+        onChange={(e) => typed('confirm', e.target.value, setConfirm)}
         aria-invalid={error?.field === 'confirm' || undefined}
       />
 

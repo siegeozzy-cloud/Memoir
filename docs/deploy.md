@@ -82,6 +82,18 @@ VITE_API_URL = https://memoir-api.onrender.com
 Add it for Production (and Preview, if you want branch builds to work), then redeploy. Vite only reads
 variables at build time, so a redeploy is required — changing it without one does nothing.
 
+**If your API is not at `memoir-api.onrender.com`, one more file has to say so.** The app is served
+with a Content-Security-Policy, which lists the addresses a browser is allowed to load from — and the
+API has to be on that list, or every call from the deployed app is blocked and the console fills with
+"Refused to connect". The address appears in two places:
+
+- `frontend/security-headers.ts` — `API_ORIGIN` at the top
+- `frontend/vercel.json` — inside the long `Content-Security-Policy` value, twice (`https://…` and
+  `wss://…`)
+
+Change the first, run `npm run build` in `frontend`, and the build fails with the exact value to paste
+into the second. That check is there so the two can't quietly drift apart.
+
 ## 5. Spotify
 
 In the Spotify dashboard, open your app's settings and **add a second redirect URI**:

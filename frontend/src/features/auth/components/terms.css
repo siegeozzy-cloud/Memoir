@@ -1,0 +1,209 @@
+/* The Terms and Agreements over the sign-up form. Same dark card as the auth screen, sized to the
+   text rather than to the column beside the porthole, so it reads at a comfortable width. */
+
+.terms-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  /* the row has to be told it may be smaller than the text, or it sizes to the whole unscrolled
+     document and centring pushes the card off the bottom of the screen */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 4, 8, 0.66);
+  backdrop-filter: blur(3px);
+  animation: terms-fade 0.16s ease both;
+}
+
+@keyframes terms-fade {
+  from { opacity: 0; }
+}
+
+.terms {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100%);
+  max-height: min(720px, 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #16191e, #111317);
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6);
+  outline: none;
+  animation: terms-rise 0.22s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes terms-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+}
+
+/* ---------- head ---------- */
+
+.terms-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 26px 28px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.terms-head h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.016em;
+  color: #f5f6f8;
+}
+
+.terms-updated {
+  margin: 6px 0 0;
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8d929a;
+}
+
+.terms-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #a3a8b0;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.terms-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #eef0f2;
+}
+
+/* ---------- the text ---------- */
+
+.terms-body {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 28px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.terms-body:focus-visible {
+  outline: 2px solid rgba(140, 180, 255, 0.6);
+  outline-offset: -4px;
+}
+
+.terms-body h3 {
+  margin: 24px 0 8px;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.004em;
+  color: #e7e9ec;
+}
+
+.terms-body p {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.62;
+  color: #a8adb5;
+}
+
+/* ---------- foot ---------- */
+
+.terms-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 28px 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.terms-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #8d929a;
+}
+
+.terms-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.terms-quiet,
+.terms-agree {
+  height: 42px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.terms-quiet {
+  background: rgba(255, 255, 255, 0.07);
+  color: #d7dade;
+}
+
+.terms-quiet:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.terms-agree {
+  background: #eef0f3;
+  color: #0d0f12;
+}
+
+.terms-agree:hover:not(:disabled) {
+  background: #fff;
+}
+
+.terms-agree:disabled {
+  background: rgba(255, 255, 255, 0.08);
+  color: #6e737b;
+  cursor: not-allowed;
+}
+
+/* ---------- a narrow window ---------- */
+
+@media (max-width: 560px) {
+  .terms-backdrop { padding: 0; }
+
+  .terms {
+    width: 100%;
+    max-height: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .terms-head { padding: 22px 20px 16px; }
+  .terms-body { padding: 4px 20px 8px; }
+
+  .terms-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 20px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .terms-hint { text-align: center; }
+
+  .terms-actions > * { flex: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terms-backdrop,
+  .terms { animation: none; }
+}

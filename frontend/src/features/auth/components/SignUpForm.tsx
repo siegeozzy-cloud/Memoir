@@ -1,8 +1,10 @@
 import { useId, useState, type FormEvent } from 'react'
 import { AuthError, type SignUpInput, type SignUpResult } from '../service'
+import { BLOCKED, cleanEmail, cleanName, cleanPassword, emailProblem, nameProblem, passwordProblem, type Cleaned } from '../validation'
 import { Check, Field, PasswordField } from './fields'
 import { ArrowRightIcon, MailIcon, UserIcon } from './icons'
 import { passwordStrength } from './strength'
+import TermsDialog from './TermsDialog'
 
 type Props = {
   onSubmit: (input: SignUpInput) => Promise<SignUpResult>
@@ -19,12 +21,28 @@ export default function SignUpForm({ onSubmit, autoFocus }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<AuthError | null>(null)
   const [sent, setSent] = useState<{ email: string; delivery?: 'email' | 'console' } | null>(null)
+  const [terms, setTerms] = useState(false)
   const strength = passwordStrength(password)
 
-  // the server checks every field and answers with a message for the one that needs fixing
+  /** Keeps a box to the characters its field allows, and says so the moment one is refused. */
+  const typed = (field: 'name' | 'email' | 'password', raw: string, clean: (raw: string) => Cleaned, set: (v: string) => void) => {
+    const { value, blocked } = clean(raw)
+    set(value)
+    if (blocked) setError(new AuthError(BLOCKED[field], field))
+    else if (error?.field === field) setError(null)
+  }
+
+  // the server checks every field too, and answers with a message for the one that needs fixing;
+  // doing it here first means a typo doesn't cost a round trip or one of the five tries a minute
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (busy) return
+    const problem =
+      (nameProblem(name) && new AuthError(nameProblem(name)!, 'name')) ||
+      (emailProblem(email) && new AuthError(emailProblem(email)!, 'email')) ||
+      (passwordProblem(password) && new AuthError(passwordProblem(password)!, 'password')) ||
+      (!agreed && new AuthError('Read and agree to the Terms and Agreements to continue.', 'acceptedTerms'))
+    if (problem) return setError(problem)
     setBusy(true)
     setError(null)
     try {
@@ -54,8 +72,9 @@ export default function SignUpForm({ onSubmit, autoFocus }: Props) {
         icon={<UserIcon />}
         autoComplete="name"
         placeholder="Your name"
+        maxLength={50}
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => typed('name', e.target.value, cleanName, setName)}
         aria-invalid={error?.field === 'name' || undefined}
         autoFocus={autoFocus}
       />
@@ -69,8 +88,9 @@ export default function SignUpForm({ onSubmit, autoFocus }: Props) {
         autoCapitalize="off"
         spellCheck={false}
         placeholder="you@example.com"
+        maxLength={254}
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        onChange={(e) => typed('email', e.target.value, cleanEmail, setEmail)}
         aria-invalid={error?.field === 'email' || undefined}
       />
       <PasswordField
@@ -78,8 +98,9 @@ export default function SignUpForm({ onSubmit, autoFocus }: Props) {
         label="Password"
         autoComplete="new-password"
         placeholder="At least 8 characters"
+        maxLength={128}
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        onChange={(e) => typed('password', e.target.value, cleanPassword, setPassword)}
         aria-invalid={error?.field === 'password' || undefined}
         aria-describedby={`${id}-strength`}
       />
@@ -97,14 +118,32 @@ export default function SignUpForm({ onSubmit, autoFocus }: Props) {
       </div>
 
       <div className="auth-row is-terms">
-        <Check checked={agreed} onChange={(e) => setAgreed(e.target.checked)} aria-invalid={error?.field === 'acceptedTerms' || undefined}>
+        <Check
+          checked={agreed}
+          onChange={(e) => {
+            setAgreed(e.target.checked)
+            if (error?.field === 'acceptedTerms') setError(null)
+          }}
+          aria-invalid={error?.field === 'acceptedTerms' || undefined}
+        >
           I agree to the
         </Check>
-        {/* TODO: the terms page */}
-        <button type="button" className="auth-link is-underlined">
+        <button type="button" className="auth-link is-underlined" onClick={() => setTerms(true)}>
           Terms and Agreements
         </button>
       </div>
+      {/* Reading them to the end is what ticks the box, so nobody agrees to something they never saw. */}
+      {terms && (
+        <TermsDialog
+          agreed={agreed}
+          onAgree={() => {
+            setAgreed(true)
+            if (error?.field === 'acceptedTerms') setError(null)
+            setTerms(false)
+          }}
+          onClose={() => setTerms(false)}
+        />
+      )}
 
       {error && (
         <p className="auth-error" role="alert">
