@@ -12,8 +12,8 @@
   z-index: 7;
   top: calc(14px + env(safe-area-inset-top, 0px));
   left: 50%;
-  width: min(176px, calc(100vw - 24px));
-  height: 60px;
+  width: min(204px, calc(100vw - 24px));
+  height: 66px;
   border: 1px solid rgba(29, 185, 84, 0.45);
   border-radius: 999px;
   background: #000;
@@ -36,11 +36,11 @@
 
 .np.is-open {
   top: 0;
-  width: min(196px, calc(100vw - 24px));
-  height: calc(126px + env(safe-area-inset-top, 0px));
+  width: min(244px, calc(100vw - 24px));
+  height: calc(158px + env(safe-area-inset-top, 0px));
   border-color: rgba(30, 215, 96, 0.9);
   border-top-color: transparent; /* the tab hangs off the top edge, so its top line is gone */
-  border-radius: 0 0 30px 30px;
+  border-radius: 0 0 34px 34px;
 }
 
 .np:focus-visible {
@@ -52,8 +52,8 @@
   position: absolute;
   top: 0;
   right: -10px;
-  width: 60px;
-  height: 60px;
+  width: 66px;
+  height: 66px;
   color: #1db954;
   opacity: 0.22;
   --logo-ink: #000;
@@ -62,29 +62,29 @@
 }
 
 .np.is-open .np-watermark {
-  top: calc(22px + env(safe-area-inset-top, 0px));
-  right: -6px;
-  width: 100px;
-  height: 100px;
+  top: calc(26px + env(safe-area-inset-top, 0px));
+  right: -4px;
+  width: 124px;
+  height: 124px;
 }
 
 .np-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px 0 20px;
+  gap: 12px;
+  padding: 11px 16px 0 22px;
   transition: padding 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
 }
 
 .np.is-open .np-head {
-  padding: calc(24px + env(safe-area-inset-top, 0px)) 14px 0;
+  padding: calc(26px + env(safe-area-inset-top, 0px)) 18px 0;
 }
 
 .np-art {
   flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 9px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   object-fit: cover;
   background: #222;
 }
@@ -95,16 +95,16 @@
 }
 
 .np-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
-  line-height: 19px;
+  line-height: 21px;
   letter-spacing: 0.01em;
 }
 
 .np-artist {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 300;
-  line-height: 17px;
+  line-height: 18px;
   color: rgba(255, 255, 255, 0.62);
 }
 
@@ -137,7 +137,7 @@
 /* ---------- the part that only shows while the tab is open ---------- */
 
 .np-fold {
-  padding: 2px 14px 4px;
+  padding: 8px 18px 10px;
   opacity: 0;
   transform: translateY(-6px);
   pointer-events: none;
@@ -160,8 +160,8 @@
 .np-btn {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 26px;
+  width: 32px;
+  height: 30px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -184,14 +184,14 @@
 }
 
 .np-play {
-  width: 30px;
+  width: 34px;
 }
 
 .np-bar {
   position: relative;
   width: 100%;
-  height: 10px;
-  margin-top: 2px;
+  height: 12px;
+  margin-top: 8px;
   cursor: pointer;
 }
 
@@ -234,7 +234,7 @@
   display: flex;
   justify-content: space-between;
   width: 100%;
-  margin-top: 2px;
+  margin-top: 4px;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, 0.6);

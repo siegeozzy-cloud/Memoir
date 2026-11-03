@@ -99,16 +99,16 @@ export default function NowPlaying({ spotify, hidden }: { spotify: SpotifyApi; h
                 title={spotify.lyricsOn ? 'Hide lyrics' : 'Show lyrics'}
                 onClick={spotify.toggleLyrics}
               >
-                <LyricsIcon size={17} />
+                <LyricsIcon size={18} />
               </button>
               <button type="button" className="np-btn" aria-label="Previous" title="Previous" onClick={spotify.previous}>
-                <PrevIcon size={16} />
+                <PrevIcon size={17} />
               </button>
               <button type="button" className="np-btn np-play" aria-label={p.isPlaying ? 'Pause' : 'Play'} title={p.isPlaying ? 'Pause' : 'Play'} onClick={spotify.togglePlay}>
-                {p.isPlaying ? <PauseIcon size={21} /> : <PlayIcon size={21} />}
+                {p.isPlaying ? <PauseIcon size={24} /> : <PlayIcon size={24} />}
               </button>
               <button type="button" className="np-btn" aria-label="Next" title="Next" onClick={spotify.next}>
-                <NextIcon size={16} />
+                <NextIcon size={17} />
               </button>
               <button
                 type="button"
@@ -117,7 +117,7 @@ export default function NowPlaying({ spotify, hidden }: { spotify: SpotifyApi; h
                 title={REPEAT_LABEL[p.repeat]}
                 onClick={spotify.cycleRepeat}
               >
-                <RepeatIcon size={17} one={p.repeat === 'track'} />
+                <RepeatIcon size={18} one={p.repeat === 'track'} />
               </button>
             </div>
             <div
