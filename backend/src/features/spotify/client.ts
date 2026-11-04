@@ -43,17 +43,40 @@ export async function linkAccount(userId: string, code: string) {
 
 const refreshing = new Map<string, Promise<string>>()
 
+/** Thrown when the link has to be forgotten: the app answers it by offering to link again. */
+const unlinked = (message: string) => new HttpError(409, 'spotify-unlinked', message)
+
+/**
+ * Reads a stored token, treating one that can't be read as a link that is no longer there.
+ *
+ * Tokens are sealed with TOKEN_KEY, so generating a new one — or restoring a database into an
+ * environment with a different one — leaves rows that no longer open. `decrypt` throws a plain
+ * error for that, which used to reach the browser as "Something went wrong on our side" on every
+ * button, with nothing the person could do about it. Forgetting the link instead turns it into
+ * "link it again", which is both true and fixable.
+ */
+async function readToken(sealed: string, userId: string) {
+  try {
+    return decrypt(sealed)
+  } catch {
+    // awaited, so by the time the browser is told to link again the dead row is already gone and
+    // /status agrees with the answer it just got
+    await db.delete(spotifyLinks).where(eq(spotifyLinks.userId, userId))
+    throw unlinked('Spotify needs linking again.')
+  }
+}
+
 /** A valid access token for this user, refreshed when it's within a minute of expiring. */
 async function accessToken(userId: string, force = false): Promise<string> {
   const link = await db.query.spotifyLinks.findFirst({ where: eq(spotifyLinks.userId, userId) })
-  if (!link) throw new HttpError(409, 'spotify-unlinked', 'Link Spotify in your profile first.')
-  if (!force && link.expiresAt.getTime() - Date.now() > 60_000) return decrypt(link.accessToken)
+  if (!link) throw unlinked('Link Spotify in your profile first.')
+  if (!force && link.expiresAt.getTime() - Date.now() > 60_000) return await readToken(link.accessToken, userId)
   // one refresh per user at a time, however many requests arrive together
   let pending = refreshing.get(userId)
   if (!pending) {
     pending = (async () => {
       try {
-        const t = await tokenRequest({ grant_type: 'refresh_token', refresh_token: decrypt(link.refreshToken) })
+        const t = await tokenRequest({ grant_type: 'refresh_token', refresh_token: await readToken(link.refreshToken, userId) })
         await db
           .update(spotifyLinks)
           .set({

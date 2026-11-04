@@ -13,7 +13,10 @@
   top: calc(14px + env(safe-area-inset-top, 0px));
   left: 50%;
   width: min(216px, calc(100vw - 24px));
-  height: 72px;
+  /* At rest this is the same 50px pill as the dock at the foot of the screen, so the two read as
+     one family of floating control rather than two different ideas of one. Everything inside is
+     sized to that and grows back to the design's measurements when the tab opens. */
+  height: 50px;
   border: 1px solid rgba(29, 185, 84, 0.45);
   border-radius: 999px;
   background: #000;
@@ -51,9 +54,9 @@
 .np-watermark {
   position: absolute;
   top: 0;
-  right: -10px;
-  width: 72px;
-  height: 72px;
+  right: -8px;
+  width: 50px;
+  height: 50px;
   color: #1db954;
   opacity: 0.22;
   --logo-ink: #000;
@@ -71,22 +74,33 @@
 .np-head {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 11px 20px 0 26px;
-  transition: padding 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
+  gap: 10px;
+  /* the pill's inside, so the row sits in the middle of it rather than against the top */
+  height: 48px;
+  padding: 0 16px 0 8px;
+  transition: padding 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), height 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), gap 0.34s ease;
 }
 
 .np.is-open .np-head {
+  height: auto;
+  gap: 14px;
   padding: calc(30px + env(safe-area-inset-top, 0px)) 20px 0 26px;
 }
 
 .np-art {
   flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #222;
+  transition: width 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), height 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), border-radius 0.34s ease;
+}
+
+.np.is-open .np-art {
   width: 50px;
   height: 50px;
   border-radius: 11px;
-  object-fit: cover;
-  background: #222;
 }
 
 .np-meta {
@@ -94,18 +108,32 @@
   flex: 1;
 }
 
+/* Two lines that have to sit inside a 48px pill while collapsed: 19 + 16 leaves a little air above
+   and below. They grow to the design's 23 and 19 when the tab opens. */
 .np-title {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
-  line-height: 23px;
+  line-height: 19px;
   letter-spacing: 0.01em;
+  transition: font-size 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), line-height 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+.np.is-open .np-title {
+  font-size: 18px;
+  line-height: 23px;
 }
 
 .np-artist {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 300;
-  line-height: 19px;
+  line-height: 16px;
   color: rgba(255, 255, 255, 0.62);
+  transition: font-size 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), line-height 0.34s cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+.np.is-open .np-artist {
+  font-size: 14px;
+  line-height: 19px;
 }
 
 /* ---------- name that slides, when it is too long for the tab ---------- */
@@ -386,6 +414,9 @@
   .np,
   .np.is-shown,
   .np-head,
+  .np-art,
+  .np-title,
+  .np-artist,
   .np-watermark,
   .np-fold,
   .np.is-open .np-fold,

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
+import { createCipheriv, randomBytes } from 'node:crypto'
 import { after, before, test } from 'node:test'
+import { eq } from 'drizzle-orm'
 import sharp from 'sharp'
 import { buildApp } from '../src/app.ts'
-import { pool, runMigrations } from '../src/db/client.ts'
+import { db, pool, runMigrations } from '../src/db/client.ts'
+import { spotifyLinks, users } from '../src/db/schema.ts'
 import { decrypt, encrypt } from '../src/lib/crypto.ts'
 import { testOutbox } from '../src/lib/mailer.ts'
 
@@ -201,6 +204,40 @@ test('Spotify tokens are encrypted at rest', () => {
   assert.equal(decrypt(sealed), 'BQD-access-token')
   const tampered = sealed.slice(0, -2) + (sealed.endsWith('A') ? 'BB' : 'AA')
   assert.throws(() => decrypt(tampered))
+})
+
+test('a stored Spotify token that no longer opens asks for a relink, not a server error', async () => {
+  // What a regenerated TOKEN_KEY leaves behind: a link row whose tokens were sealed with the old
+  // key. `decrypt` throws a plain error for that, which used to surface on every single button as
+  // "Something went wrong on our side", with no way out of it.
+  const me = await db.query.users.findFirst({ where: eq(users.email, email) })
+  const stale = (plain: string) => {
+    const iv = randomBytes(12)
+    const c = createCipheriv('aes-256-gcm', randomBytes(32), iv) // a key that is not ours
+    const data = Buffer.concat([c.update(plain, 'utf8'), c.final()])
+    return ['v1', iv.toString('base64url'), c.getAuthTag().toString('base64url'), data.toString('base64url')].join('.')
+  }
+  await db.insert(spotifyLinks).values({
+    userId: me!.id,
+    spotifyUserId: 'spotify-user',
+    accessToken: stale('access'),
+    refreshToken: stale('refresh'),
+    expiresAt: new Date(Date.now() + 3_600_000),
+    scope: 'user-read-playback-state',
+  })
+
+  for (const [method, url] of [
+    ['GET', '/api/spotify/player'],
+    ['PUT', '/api/spotify/player/play'],
+    ['POST', '/api/spotify/player/next'],
+  ] as const) {
+    const r = await json(method, url)
+    assert.equal(r.statusCode, 409, `${method} ${url} answered ${r.statusCode}: ${r.body}`)
+    assert.equal(r.json().error.code, 'spotify-unlinked', `${method} ${url}`)
+  }
+
+  // and the unreadable link is gone, so the app offers to link again rather than retrying forever
+  assert.equal(await db.query.spotifyLinks.findFirst({ where: eq(spotifyLinks.userId, me!.id) }), undefined)
 })
 
 test('forgot password: the emailed link sets a new password and ends the old sessions', async () => {
