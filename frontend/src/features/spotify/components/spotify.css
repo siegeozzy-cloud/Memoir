@@ -51,12 +51,15 @@
   border-color: #1ed760;
 }
 
-/* At rest the logo is a quiet mark in the corner, not a second subject: at the pill's full 50px it
-   filled the whole height and crowded the name. It grows into the backdrop once the tab opens. */
+/* At rest the logo is a quiet mark at the end of the pill, not a second subject. It used to hang off
+   the right edge, where `overflow: hidden` sliced the last few pixels off the circle; now it sits
+   7px in, which puts it dead centre of the pill's 24px-radius end cap — the same inset as the
+   artwork at the other end, so the two bookend the name. It grows into the backdrop once the tab
+   opens, where hanging off the edge is the point. */
 .np-watermark {
   position: absolute;
   top: 7px;
-  right: -4px;
+  right: 7px;
   width: 34px;
   height: 34px;
   color: #1db954;
@@ -79,7 +82,9 @@
   gap: 10px;
   /* the pill's inside, so the row sits in the middle of it rather than against the top */
   height: 48px;
-  padding: 0 16px 0 8px;
+  /* 7px on the left puts the round artwork concentric with the pill's end cap; 50px on the right
+     keeps the name clear of the logo now that the logo sits inside rather than off the edge */
+  padding: 0 50px 0 7px;
   transition: padding 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), height 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), gap 0.34s ease;
 }
 
@@ -89,11 +94,15 @@
   padding: calc(30px + env(safe-area-inset-top, 0px)) 20px 0 26px;
 }
 
+/* Round while the tab is a pill: a square's corners reach towards the curve of the end cap and read
+   as cramped however much padding is put around them, where a circle sits inside it concentrically
+   and the gap is even the whole way round. It unrolls into the design's rounded square on opening,
+   where the container has corners of its own again. */
 .np-art {
   flex: none;
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: 999px;
   object-fit: cover;
   background: #222;
   transition: width 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), height 0.34s cubic-bezier(0.22, 0.9, 0.3, 1), border-radius 0.34s ease;
