@@ -4,7 +4,10 @@ import { usePlaybackPosition, type SpotifyApi } from '../useSpotify'
 
 // Synced lyrics on the left, like Spotify: the line being sung is green, and the text slides up
 // as the song goes. It's clipped to its frame. Click a line to jump there.
-export default function LyricsPanel({ spotify, shown }: { spotify: SpotifyApi; shown: boolean }) {
+// `onMap`: zoomed into the light 2D terrain, where pale text on a pale map is unreadable — the
+// sung line keeps its green but gains a black outline, and the rest turns to dark ink. Reverts
+// on the way back out to the globe. Same signal the fun fact and the place note already use.
+export default function LyricsPanel({ spotify, shown, onMap = false }: { spotify: SpotifyApi; shown: boolean; onMap?: boolean }) {
   const p = spotify.playback
   const track = p?.track
   const [lyrics, setLyrics] = useState<{ trackId: string; value: Lyrics | 'loading' | 'error' } | null>(null)
@@ -41,7 +44,7 @@ export default function LyricsPanel({ spotify, shown }: { spotify: SpotifyApi; s
   else if (value.kind === 'none') status = 'No lyrics for this song yet.'
 
   return (
-    <aside className={`lyrics${shown ? ' is-shown' : ''}`} aria-label="Lyrics" aria-hidden={!shown}>
+    <aside className={`lyrics${shown ? ' is-shown' : ''}${onMap ? ' on-map' : ''}`} aria-label="Lyrics" aria-hidden={!shown}>
       {status ? (
         <p className="lyrics-status">{status}</p>
       ) : synced ? (

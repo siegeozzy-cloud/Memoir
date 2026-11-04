@@ -371,6 +371,44 @@
   color: rgba(255, 255, 255, 0.45) !important;
 }
 
+/* ---------- lyrics over the 2D terrain ---------- */
+
+/*
+ * Zoomed in far enough that the pale street map is behind the lyrics. White-on-white vanishes, so
+ * the unsung lines become dark ink. The sung line keeps Spotify's green — it is the one thing the
+ * eye tracks — and gets a black outline instead, drawn *behind* the fill via paint-order so the
+ * green stays solid rather than being eaten from the inside by the stroke. Colour transitions are
+ * inherited from the rules above, so going back out to the globe eases back on its own.
+ */
+.lyrics.on-map .lyrics-lines li {
+  color: rgba(0, 0, 0, 0.78);
+}
+
+.lyrics.on-map .lyrics-lines li.is-past {
+  color: rgba(0, 0, 0, 0.42);
+}
+
+.lyrics.on-map .lyrics-lines li.is-current,
+.lyrics.on-map .lyrics-lines li.is-current button:hover {
+  color: #1ed760;
+  /* 2px, not more: Courier's counters close up and the line turns to blobs past about 2.5px */
+  -webkit-text-stroke: 2px #000;
+  paint-order: stroke fill;
+}
+
+.lyrics.on-map .lyrics-lines button:hover {
+  color: #000;
+}
+
+.lyrics.on-map .lyrics-lines.is-plain li {
+  color: rgba(0, 0, 0, 0.72);
+}
+
+.lyrics.on-map .lyrics-note,
+.lyrics.on-map .lyrics-status {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
 @media (max-width: 1000px) {
   .lyrics {
     display: none;

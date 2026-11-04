@@ -268,7 +268,7 @@ export default function App() {
             {spotify.notice}
           </p>
         )}
-        <LyricsPanel spotify={spotify} shown={spotify.lyricsOn && !!spotify.playback && !capturesOpen && !phone && atHome} />
+        <LyricsPanel spotify={spotify} onMap={onMap} shown={spotify.lyricsOn && !!spotify.playback && !capturesOpen && !phone && atHome} />
         <ProfileMenu profileApi={profileApi} email={auth.session?.email ?? ''} spotify={spotify} onSignOut={signOut} />
         <DetailsToggle on={details} onChange={setDetails} />
 
