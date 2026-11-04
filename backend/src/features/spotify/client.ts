@@ -111,5 +111,21 @@ export async function spotifyApi(userId: string, path: string, init: RequestInit
   if (r.status === 429) throw new HttpError(429, 'rate-limited', 'Spotify is busy. Try again in a moment.')
   if (!r.ok) throw new HttpError(502, 'spotify', 'Spotify didn’t respond. Try again.')
   const text = await r.text()
-  return text ? JSON.parse(text) : null
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    /**
+     * A 2xx whose body isn't JSON. Spotify does this to the control endpoints — play, pause, next,
+     * seek, repeat — which are documented as answering 204 but in practice sometimes come back 200
+     * with a short body that isn't JSON at all.
+     *
+     * None of those callers read the body, so there is nothing to lose by treating it as no
+     * content; it used to throw a bare SyntaxError, which reached the person as a 500 and
+     * "Something went wrong on our side" on every press of every button. A read that does want the
+     * body (the player) gets null, which the app already shows as nothing playing.
+     */
+    console.warn(`Spotify answered ${path} with ${r.status} and a body that isn't JSON: ${text.slice(0, 40)}`)
+    return null
+  }
 }

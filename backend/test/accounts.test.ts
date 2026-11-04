@@ -240,6 +240,47 @@ test('a stored Spotify token that no longer opens asks for a relink, not a serve
   assert.equal(await db.query.spotifyLinks.findFirst({ where: eq(spotifyLinks.userId, me!.id) }), undefined)
 })
 
+test('a control call Spotify answers with a non-JSON body still works the button', async () => {
+  // Seen in production: PUT /me/player/seek came back 200 with a short body that isn't JSON, and
+  // `JSON.parse` threw a bare SyntaxError — a 500, and "Something went wrong on our side" under
+  // every button. Nothing reads a control call's body, so it must not be able to fail the press.
+  const me = await db.query.users.findFirst({ where: eq(users.email, email) })
+  await db.insert(spotifyLinks).values({
+    userId: me!.id,
+    spotifyUserId: 'spotify-user',
+    accessToken: encrypt('access'),
+    refreshToken: encrypt('refresh'),
+    expiresAt: new Date(Date.now() + 3_600_000),
+    scope: 'user-read-playback-state',
+  })
+
+  const realFetch = globalThis.fetch
+  globalThis.fetch = (async (url: string | URL) =>
+    String(url).includes('/me/player')
+      ? new Response('bLI3JKDZTQ not json at all', { status: 200, headers: { 'content-type': 'text/plain' } })
+      : realFetch(url)) as typeof fetch
+
+  try {
+    for (const [method, url] of [
+      ['PUT', '/api/spotify/player/play'],
+      ['POST', '/api/spotify/player/next'],
+    ] as const) {
+      const r = await json(method, url)
+      assert.equal(r.statusCode, 204, `${method} ${url} answered ${r.statusCode}: ${r.body}`)
+    }
+    const seek = await json('PUT', '/api/spotify/player/seek', { positionMs: 5000 })
+    assert.equal(seek.statusCode, 204, seek.body)
+
+    // and a read of the same shape says "nothing playing" rather than falling over
+    const player = await json('GET', '/api/spotify/player')
+    assert.equal(player.statusCode, 200, player.body)
+    assert.equal(player.json().playback, null)
+  } finally {
+    globalThis.fetch = realFetch
+    await db.delete(spotifyLinks).where(eq(spotifyLinks.userId, me!.id))
+  }
+})
+
 test('forgot password: the emailed link sets a new password and ends the old sessions', async () => {
   const next = 'a quite different passphrase'
   const wasSignedIn = cookie
