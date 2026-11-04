@@ -196,7 +196,7 @@ body.street { --hud: var(--map-ink); --hud-halo: var(--map-halo); }
 /* ---------- loading ---------- */
 #loading {
   position: fixed; inset: 0; z-index: 20; display: grid; place-items: center;
-  background: var(--space); transition: opacity 0.9s ease;
+  background: var(--space); transition: opacity 0.45s ease;
 }
 #loading.done { opacity: 0; pointer-events: none; }
 .load-box { display: grid; gap: 14px; justify-items: center; color: var(--load-ink); font: 600 12.5px/1.4 var(--font-ui); letter-spacing: 0.08em; text-transform: uppercase; text-align: center; padding: 0 24px; }
@@ -1582,7 +1582,9 @@ function updateStreet(now, dt, altKm) {
 
 /* ---------------- data loading ---------------- */
 const loader = new THREE.TextureLoader();
-const total = 6; let done = 0;
+// The bar tracks exactly what holds the overlay up: the two small first-paint textures below.
+// Everything else loads behind the globe once it is on screen, so it must not tick.
+const total = 2; let done = 0;
 function tick() { done++; loadBar.style.width = Math.round((done / total) * 100) + '%'; }
 function loadTex(url, srgb, red, quiet) {
   return new Promise((res, rej) => loader.load(url, (t) => {
@@ -1605,24 +1607,44 @@ function decodeLines(list, scale) {
 }
 
 let started = false;
-const dayP = loadTex('tex/day.jpg', true, false).then((t) => { earthMat.uniforms.tDay.value = t; });
-const waterP = loadTex('tex/water.png', false, true).then((t) => { earthMat.uniforms.tWater.value = t; });
-const cloudP = loadTex('tex/clouds.jpg', false, true).then((t) => { earthMat.uniforms.tClouds.value = t; cloudMat.uniforms.tClouds.value = t; });
-const nightP = loadTex('tex/night.jpg', true, false).then((t) => { earthMat.uniforms.tNight.value = t; });
-const placesP = fetch('places.json').then((r) => { if (!r.ok) throw new Error('places'); return r.json(); }).then((P) => { tick(); setupPlaces(P); });
+/**
+ * First paint waits on a 640x320 pair (~107 KB together), not the full 5400x2700 day map and
+ * 4096x2048 water mask (~3.9 MB). On a 10 Mbps connection that is the difference between roughly
+ * three seconds of black screen and a quarter of one. The full-resolution pair then loads behind
+ * the globe and replaces the small one in place — the same trick detail.jpg already uses below.
+ * The textures are the same projection at the same aspect, so the swap is invisible apart from
+ * the sharpening; the small ones are disposed once their replacement is in the uniform.
+ */
+const dayLoP = loadTex('tex/day-lo.jpg', true, false).then((t) => { earthMat.uniforms.tDay.value = t; return t; });
+const waterLoP = loadTex('tex/water-lo.png', false, true).then((t) => { earthMat.uniforms.tWater.value = t; return t; });
+/** Swaps a full-resolution texture into its uniform and frees the placeholder it replaces. */
+function upgrade(url, srgb, red, uniforms, loP) {
+  return loadTex(url, srgb, red, true).then((t) => {
+    uniforms.forEach((u) => { u.value = t; });
+    return loP.then((lo) => { if (lo !== t) lo.dispose(); }).catch(() => {});
+  }).catch(() => {}); // the small texture is already showing, so a failure here is not fatal
+}
+const cloudP = loadTex('tex/clouds.jpg', false, true, true).then((t) => { earthMat.uniforms.tClouds.value = t; cloudMat.uniforms.tClouds.value = t; });
+const nightP = loadTex('tex/night.jpg', true, false, true).then((t) => { earthMat.uniforms.tNight.value = t; });
+const placesP = fetch('places.json').then((r) => { if (!r.ok) throw new Error('places'); return r.json(); }).then((P) => { setupPlaces(P); });
 const bordersP = fetch('borders.json').then((r) => { if (!r.ok) throw new Error('borders'); return r.json(); }).then((b) => {
-  tick();
   const c0 = decodeLines(b.countries, b.scale), c1 = decodeLines(b.states, b.scale);
   countryLines = buildLines(c0, 1.0008, countryMat); countryLines.renderOrder = 4; scene.add(countryLines);
   stateLines = buildLines(c1, 1.0007, stateMat); stateLines.renderOrder = 3; scene.add(stateLines);
 });
-Promise.all([dayP, waterP]).then(() => {
+Promise.all([dayLoP, waterLoP]).then(() => {
   started = true;
-  setTimeout(() => $('#loading').classList.add('done'), 150);
-  setTimeout(() => { $('#loading').hidden = true; }, 1200);
-  // a sharper relief layer for close-ups, only where the GPU has room for it
+  setTimeout(() => $('#loading').classList.add('done'), 100);
+  setTimeout(() => { $('#loading').hidden = true; }, 600); // 100 + the 0.45s fade, plus a beat
+  // Now that the globe is on screen, fetch the real imagery. The full pair goes first: it is what
+  // the eye lands on. The relief layer follows, and only where the GPU has room for it.
+  const fullP = Promise.all([
+    upgrade('tex/day.jpg', true, false, [earthMat.uniforms.tDay], dayLoP),
+    upgrade('tex/water.png', false, true, [earthMat.uniforms.tWater], waterLoP),
+  ]);
   if (caps.maxTextureSize >= 8192 && !coarse && (navigator.deviceMemory === undefined || navigator.deviceMemory >= 4)) {
-    loadTex('tex/detail.jpg', false, true).then((t) => { earthMat.uniforms.tDetail.value = t; hasDetail = true; }).catch(() => {});
+    fullP.then(() => loadTex('tex/detail.jpg', false, true, true)
+      .then((t) => { earthMat.uniforms.tDetail.value = t; hasDetail = true; }).catch(() => {}));
   }
 }).catch(() => fail('The Earth imagery did not load. Reload the page to try again.'));
 Promise.allSettled([cloudP, nightP, placesP, bordersP]);
