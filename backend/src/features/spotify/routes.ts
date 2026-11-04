@@ -7,6 +7,7 @@ import { spotifyLinks } from '../../db/schema.ts'
 import { decrypt, encrypt } from '../../lib/crypto.ts'
 import { parse } from '../../lib/errors.ts'
 import { requireAuth, userOf } from '../../lib/session.ts'
+import { nudge } from './activity.ts'
 import { linkAccount, SCOPES, spotifyApi } from './client.ts'
 import { toPlayback, type ApiPlayer } from './playback.ts'
 
@@ -81,8 +82,15 @@ export default async function spotifyRoutes(app: FastifyInstance) {
 
   app.register(async (player) => {
     player.addHook('preHandler', requireAuth)
+    /**
+     * Every button here goes through this, seek and repeat included, so one `nudge` covers them all:
+     * the command has gone to Spotify, and a moment later the server looks at what actually happened
+     * and pushes it to every tab this person has open. Without it the press would only show up on
+     * the next heartbeat, which is what made the controls feel dead.
+     */
     const control = (method: string, path: string) => async (req: Parameters<typeof requireAuth>[0], reply: FastifyReply) => {
       await spotifyApi(userOf(req).id, path, { method })
+      nudge(userOf(req).id)
       return reply.code(204).send()
     }
 

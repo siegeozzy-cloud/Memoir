@@ -53,3 +53,24 @@ export function toPlayback(p: ApiPlayer | null): Playback | null {
  * resumed, repeat switched — is news.
  */
 export const playbackSignature = (p: Playback | null) => (p ? `${p.track.id}:${p.isPlaying}:${p.repeat}` : 'none')
+
+/** What a tab was last told, and when, so we can work out what it is showing now. */
+export type Sent = { signature: string; progressMs: number; at: number }
+
+/**
+ * Whether a tab holding `before` is now showing something other than `playback`.
+ *
+ * This is what keeps a song that is merely playing off the wire: the tab advances the position by
+ * its own clock, so second by second it is already right and there is nothing to say. It returns
+ * true when the song, the paused state or the repeat mode differ, when the tab has been told
+ * nothing yet, or when the position has slipped more than `driftMs` from where the tab will have
+ * carried it — a seek, a track looping, or clocks pulling apart.
+ */
+export function worthSending(before: Sent | undefined, playback: Playback | null, now: number, driftMs: number) {
+  const signature = playbackSignature(playback)
+  if (before === undefined || before.signature !== signature) return true
+  if (playback === null) return false
+  // where the tab's own clock will have carried the bar to by now
+  const expected = playback.isPlaying ? before.progressMs + (now - before.at) : before.progressMs
+  return Math.abs(expected - playback.progressMs) > driftMs
+}

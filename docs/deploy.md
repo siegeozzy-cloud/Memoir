@@ -226,7 +226,11 @@ small:
 - **Nothing polls over HTTP.** New messages, presence, friend requests, tagged posts and now-playing
   all arrive pushed down one WebSocket. The Spotify bar used to ask `/api/spotify/player` every four
   seconds — about 900 requests an hour per open tab, which on its own was most of a month's budget.
-  The server asks Spotify once every 15 seconds for everyone online and pushes only what changed.
+  The server asks Spotify instead and pushes only what changed, at the moments something can have
+  changed: a 10-second heartbeat for anything done elsewhere (their phone, the desktop app), a burst
+  of three checks right after one of our own buttons is pressed, and a check timed to land just as
+  the current track runs out. Between those the tab advances the bar on its own clock, and only a
+  slip of more than a second is corrected — the bound that keeps time-synced lyrics honest.
 - **Lists revalidate.** `/api/memories`, `/api/chat/conversations` and a conversation's messages carry
   an ETag, so reopening the app when nothing has changed costs a 304 — a couple of hundred bytes
   instead of the whole list.

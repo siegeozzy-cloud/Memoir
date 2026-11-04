@@ -112,11 +112,19 @@ export function useSpotify(signedIn: boolean) {
       if (optimistic) setPlayback((p) => (p ? optimistic(p) : p))
       try {
         await run()
+        /**
+         * No asking again here. The server took the command, so it looks at what Spotify actually
+         * did a moment later and pushes the answer to every tab this person has open — see `nudge`
+         * in the backend's spotify/activity.ts. Asking from here as well used to race it: a reply
+         * to a question sent before the push could arrive after it and put the old song back.
+         */
       } catch (e) {
         // the server's messages are written to be shown: Premium needed, no active device, …
         setNotice(e instanceof Error ? e.message : 'Spotify didn’t respond. Try again.')
+        // the command didn't take, so the guess made above is wrong: put the real state back. The
+        // push won't do it — from Spotify's side nothing changed, so there is nothing to report.
+        refresh()
       }
-      setTimeout(refresh, 350) // let Spotify catch up, then show the real state
     },
     [source, refresh, setPlayback],
   )
