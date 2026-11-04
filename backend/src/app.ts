@@ -1,5 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
+import { constants as zlibConstants } from 'node:zlib'
+import compress from '@fastify/compress'
 import cookie from '@fastify/cookie'
 import cors from '@fastify/cors'
 import multipart from '@fastify/multipart'
@@ -37,6 +39,22 @@ export async function buildApp() {
   app.setErrorHandler(errorHandler)
   // first, so every answer below — routes, static files, errors — carries them
   registerSecurityHeaders(app)
+  /**
+   * JSON compresses to a fraction of its size, and nothing in front of this server does it for us.
+   * It is the cheapest way to stay inside a metered plan's bandwidth, and browsers ask for it by
+   * themselves. Below the threshold the header costs more than it saves, and already-compressed
+   * photos and videos from /api/files are skipped — the plugin goes by whether a type is
+   * compressible at all.
+   *
+   * gzip is listed first on purpose: brotli squeezes maybe a tenth more out of a payload for several
+   * times the processor time, which is the one thing a small shared instance has least of.
+   */
+  await app.register(compress, {
+    global: true,
+    threshold: 1024,
+    encodings: ['gzip', 'deflate', 'br'],
+    brotliOptions: { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4 } },
+  })
   await app.register(cookie)
   // The app and the API are on different addresses in production, so the browser asks permission first.
   await app.register(cors, {
@@ -73,9 +91,17 @@ export async function buildApp() {
   registerCallSignalling()
   onDisconnect(dropCallsOf) // closing the last tab hangs up
 
+  /**
+   * "Is the server up?" — and nothing else. This is what the host's health check and the keep-alive
+   * cron job call, every few minutes, forever, so it deliberately touches no database: a query here
+   * would reset the database's idle timer each time and keep a serverless Postgres awake around the
+   * clock, which is metered. Use /api/health when you want to know the database is reachable too.
+   */
+  app.get('/api/ping', async () => ({ ok: true }))
+
   app.get('/api/health', async () => {
     await pool.query('select 1')
-    return { ok: true }
+    return { ok: true, db: true }
   })
   await app.register(authRoutes, { prefix: '/api/auth' })
   await app.register(accountRoutes, { prefix: '/api/account' })

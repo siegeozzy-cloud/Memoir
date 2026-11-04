@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CHAT_UPLOAD } from '../../../app/config'
 import type { MessageDraft } from '../types'
 import { CloseIcon, PlayIcon, PlusCircleIcon, SendIcon } from './icons'
 
@@ -9,15 +10,24 @@ type Props = {
 
 type Picked = { file: File; url: string; kind: 'image' | 'video' }
 
-const MAX_FILES = 10
+const MAX_FILES = CHAT_UPLOAD.maxFiles
+const MB = 1024 * 1024
 const isMedia = (f: File) => f.type.startsWith('image/') || f.type.startsWith('video/')
 
 export default function Composer({ placeholder, onSend }: Props) {
   const [text, setText] = useState('')
   const [picked, setPicked] = useState<Picked[]>([])
+  const [problem, setProblem] = useState<string | null>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const filePicker = useRef<HTMLInputElement>(null)
   const canSend = text.trim().length > 0 || picked.length > 0
+
+  // a rejected file explains itself, then gets out of the way
+  useEffect(() => {
+    if (!problem) return
+    const t = setTimeout(() => setProblem(null), 6000)
+    return () => clearTimeout(t)
+  }, [problem])
 
   // release preview URLs when they leave the tray or the composer unmounts
   const pickedRef = useRef(picked)
@@ -35,16 +45,27 @@ export default function Composer({ placeholder, onSend }: Props) {
   }, [text])
 
   const add = (files: Iterable<File>) => {
-    const media = [...files].filter(isMedia)
-    if (!media.length) return
-    setPicked((cur) => [
-      ...cur,
-      ...media.slice(0, MAX_FILES - cur.length).map((file) => ({
-        file,
-        url: URL.createObjectURL(file),
-        kind: file.type.startsWith('video/') ? ('video' as const) : ('image' as const),
-      })),
-    ])
+    const chosen = [...files]
+    const problems: string[] = []
+    const ok: File[] = []
+    for (const f of chosen) {
+      if (!isMedia(f)) problems.push(`${f.name} isn’t a photo or a video.`)
+      else if (f.size > CHAT_UPLOAD.maxBytes) problems.push(`${f.name} is ${Math.round(f.size / MB)} MB; the limit is ${CHAT_UPLOAD.maxBytes / MB} MB.`)
+      else ok.push(f)
+    }
+
+    const space = MAX_FILES - pickedRef.current.length
+    if (ok.length > space) problems.push(`A message carries up to ${MAX_FILES} files.`)
+    setProblem(problems[0] ?? null)
+
+    const fresh = ok.slice(0, Math.max(0, space)).map((file) => ({
+      file,
+      url: URL.createObjectURL(file),
+      kind: file.type.startsWith('video/') ? ('video' as const) : ('image' as const),
+    }))
+    if (!fresh.length) return
+    pickedRef.current = [...pickedRef.current, ...fresh] // so a second drop before re-render counts these
+    setPicked((cur) => [...cur, ...fresh])
   }
 
   const removeAt = (i: number) =>
@@ -57,8 +78,10 @@ export default function Composer({ placeholder, onSend }: Props) {
     if (!canSend) return
     onSend({ text, files: picked.map((p) => p.file) })
     picked.forEach((p) => URL.revokeObjectURL(p.url))
+    pickedRef.current = []
     setPicked([])
     setText('')
+    setProblem(null)
     input.current?.focus()
   }
 
@@ -70,6 +93,11 @@ export default function Composer({ placeholder, onSend }: Props) {
         send()
       }}
     >
+      {problem && (
+        <p className="composer-problem" role="status">
+          {problem}
+        </p>
+      )}
       {picked.length > 0 && (
         <ul className="composer-tray" aria-label="Attachments">
           {picked.map((p, i) => (

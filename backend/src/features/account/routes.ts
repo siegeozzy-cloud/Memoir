@@ -6,6 +6,7 @@ import { users } from '../../db/schema.ts'
 import { HttpError, parse } from '../../lib/errors.ts'
 import { announcePresence } from '../../lib/realtime.ts'
 import { endAllSessions, requireAuth, userOf } from '../../lib/session.ts'
+import { LIMITS } from '../../lib/uploads.ts'
 import { nameSchema, statusSchema } from '../../lib/validation.ts'
 import { profileOf } from '../auth/users.ts'
 import { deleteAvatar, saveAvatar } from './avatars.ts'
@@ -47,9 +48,18 @@ export default async function accountRoutes(app: FastifyInstance) {
 
   /** multipart/form-data with one file field. */
   app.put('/avatar', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
-    const part = await req.file()
+    const part = await req.file({ limits: { fileSize: LIMITS.avatar } })
     if (!part) throw new HttpError(400, 'invalid', 'Choose a picture to upload.', 'avatar')
-    const file = await saveAvatar(await part.toBuffer())
+    let upload: Buffer
+    try {
+      upload = await part.toBuffer()
+    } catch (e) {
+      if ((e as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE') {
+        throw new HttpError(413, 'too-large', `A profile picture can be up to ${Math.round(LIMITS.avatar / (1024 * 1024))} MB.`, 'avatar')
+      }
+      throw e
+    }
+    const file = await saveAvatar(upload)
     const before = userOf(req).avatarFile
     const [user] = await db.update(users).set({ avatarFile: file, updatedAt: new Date() }).where(eq(users.id, userOf(req).id)).returning()
     await deleteAvatar(before)

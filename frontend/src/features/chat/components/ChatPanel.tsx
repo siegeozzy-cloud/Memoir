@@ -65,7 +65,7 @@ export default function ChatPanel({ open, onClose, chat, memories, onShowMemory,
 
   return (
     <aside className={`chat${open ? ' is-open' : ''}`} aria-label="Messages" inert={!open}>
-      <div className="chat-mobile-bar">
+      <div className="chat-back-bar">
         <button type="button" className="icon-btn" aria-label="Close messages" onClick={onClose}>
           <BackIcon />
         </button>

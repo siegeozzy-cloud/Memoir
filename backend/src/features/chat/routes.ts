@@ -5,8 +5,9 @@ import { db } from '../../db/client.ts'
 import { conversationMembers, conversations, friendships, messageAttachments, messageHides, messages } from '../../db/schema.ts'
 import { HttpError, parse } from '../../lib/errors.ts'
 import { send } from '../../lib/realtime.ts'
+import { revalidate } from '../../lib/revalidate.ts'
 import { requireAuth, userOf } from '../../lib/session.ts'
-import { readMultipart, saveMedia, type StoredMedia } from '../../lib/uploads.ts'
+import { LIMITS, readMultipart, saveMedia, type StoredMedia } from '../../lib/uploads.ts'
 import { listConversations, memberOrFail, oneConversation, otherMembers, pushMessage, shapeMessages } from './service.ts'
 
 // Direct messages. Text and photos go through here (so there's history, search and unread counts);
@@ -27,7 +28,7 @@ const dmKey = (a: string, b: string) => [a, b].sort().join(':')
 export default async function chatRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireAuth)
 
-  app.get('/conversations', async (req) => ({ conversations: await listConversations(userOf(req).id) }))
+  app.get('/conversations', async (req, reply) => revalidate(req, reply, { conversations: await listConversations(userOf(req).id) }))
 
   /** Opens the conversation with a friend, starting it the first time. */
   app.post('/conversations', async (req) => {
@@ -55,7 +56,13 @@ export default async function chatRoutes(app: FastifyInstance) {
     return conversation
   })
 
-  app.get('/conversations/:id/messages', async (req) => {
+  /**
+   * A conversation's history. Not paginated on purpose: the info panel's shared media, the in-chat
+   * search and "jump to this message" all work over the whole conversation, so handing back a page
+   * would quietly break three things to save bandwidth that revalidation saves anyway. The 500 cap
+   * is the guard against a runaway payload.
+   */
+  app.get('/conversations/:id/messages', async (req, reply) => {
     const me = userOf(req).id
     const { id } = req.params as { id: string }
     const member = await memberOrFail(id, me)
@@ -74,7 +81,7 @@ export default async function chatRoutes(app: FastifyInstance) {
       )
       .orderBy(asc(messages.createdAt))
       .limit(500)
-    return { messages: await shapeMessages(rows, me, { otherId, otherReadAt: other?.lastReadAt }) }
+    return revalidate(req, reply, { messages: await shapeMessages(rows, me, { otherId, otherReadAt: other?.lastReadAt }) })
   })
 
   /** multipart/form-data: a `text` field, `files` for photos and videos, or both. */
@@ -82,8 +89,11 @@ export default async function chatRoutes(app: FastifyInstance) {
     const me = userOf(req).id
     const { id } = req.params as { id: string }
     await memberOrFail(id, me)
-    const { fields, files } = await readMultipart(req as never)
-    const text = parse(Text.optional(), fields.text || undefined)
+    const { fields, files } = await readMultipart(req as never, { maxBytes: LIMITS.chat })
+    // only checked when something was written: `parse` reads a missing value as an empty object, which
+    // a plain string schema then refuses — so parsing it unconditionally turned a photo sent on its
+    // own, with no caption, into "A value is missing."
+    const text = fields.text ? parse(Text, fields.text) : undefined
     if (!text && !files.length) throw new HttpError(400, 'empty', 'Write something or add a photo.')
 
     const stored: StoredMedia[] = []

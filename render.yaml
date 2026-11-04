@@ -8,7 +8,9 @@ services:
     plan: free
     buildCommand: npm ci
     startCommand: npm start
-    healthCheckPath: /api/health
+    # /api/ping, not /api/health: Render calls this repeatedly, and /api/health queries the database,
+    # which would keep a serverless Postgres awake around the clock. See docs/deploy.md step 8.
+    healthCheckPath: /api/ping
     envVars:
       - key: NODE_VERSION
         value: "24"

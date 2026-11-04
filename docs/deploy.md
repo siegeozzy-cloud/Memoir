@@ -63,13 +63,24 @@ the server.
    | `TURN_URL`, `TURN_SECRET` | see step 7 — leave empty to start |
    | `EXTRA_ORIGINS` | leave empty for now |
 
-4. Deploy. When it's up, `https://…onrender.com/api/health` should answer `{"ok":true}`. If you had to
-   guess `API_URL`, correct it now and redeploy.
+4. Deploy. When it's up, `https://…onrender.com/api/health` should answer `{"ok":true,"db":true}` —
+   that one checks the database too, so it proves `DATABASE_URL` is right. If you had to guess
+   `API_URL`, correct it now and redeploy.
 
-**Render's free plan sleeps** after 15 minutes with no traffic. The next visit takes a few seconds to
+There are two health routes, and the difference matters on the free plan:
+
+| Route | Checks | Called by |
+| --- | --- | --- |
+| `/api/ping` | that the server is answering | Render's health check, and the keep-alive job in step 8 — constantly, forever |
+| `/api/health` | the above, plus a query to the database | you, by hand, when something looks wrong |
+
+`/api/ping` deliberately touches no database. Anything called every few minutes must not, or Neon's
+compute never gets to idle — see step 8.
+
+**Render's free plan sleeps** after 15 minutes with no traffic. The next visit takes 30–60 seconds to
 wake, and the live connection drops while it sleeps, so messages won't arrive until the app reconnects.
-That's fine for showing the app to people; $7/month stops it sleeping, and is worth it as soon as anyone
-else uses it daily.
+Step 8 keeps it awake for free; $7/month stops it sleeping with no tricks, and is worth it as soon as
+anyone else uses it daily.
 
 ## 4. Point the web app at the API
 
@@ -160,7 +171,76 @@ calls that cross stricter networks, add a TURN relay:
 
 Calls also need HTTPS, which both Vercel and Render give you.
 
-## 8. Check it
+## 8. Keeping it awake (cron-job.org)
+
+The free plan sleeps after 15 minutes of quiet. A request every 14 minutes keeps it up.
+
+1. Sign up at <https://cron-job.org> — free, unlimited jobs, and it can fire as often as once a minute.
+2. **Create cronjob.** Title it `Memoir keep-alive`.
+3. URL: `https://memoir-api-zm7v.onrender.com/api/ping` — the ping route, **not** `/api/health`.
+4. Schedule: choose **Every 14 minutes** (custom → minutes `*/14`). Not 15: spin-down is *at* 15
+   minutes of inactivity, so 15 sits exactly on the edge and a few seconds of jitter loses the race.
+5. Leave the rest alone and save. The execution history shows a green 200 every 14 minutes; it emails
+   you if the job starts failing, which doubles as uptime alerting.
+
+**Why `/api/ping` and not `/api/health`.** `/api/health` runs `select 1`. A query every 14 minutes,
+around the clock, resets Neon's idle timer every time, so its compute never suspends — and Neon's free
+plan meters compute time. You'd keep Render awake by quietly burning your database allowance instead.
+`/api/ping` answers from memory and touches nothing. `render.yaml` points Render's own health check at
+it for the same reason.
+
+**This is why you only get one always-on service.** Free instance hours are **750 a month, pooled
+across your whole account**:
+
+| | Instance hours used |
+| --- | --- |
+| Asleep when idle (no pinging) | 100–300 |
+| Pinged every 14 minutes | **~730** (a 31-day month is 744) |
+
+One service pinged around the clock fits, with a few hours to spare. **Two would need ~1,460 and blow
+the quota in a fortnight.** So if you ever add a second Render service — a worker, a second API, a
+coturn container — either stop pinging one of them or move to a paid instance. Redeploys briefly run
+two instances at once, so don't push 50 times on the last day of the month either.
+
+Worth knowing: Render's own documentation discourages keep-alive pinging on free instances. It is a
+common thing to do, but it is their plan and their rules, so it's a judgement call — and if they ever
+clamp down, the fallback is the $7 instance, which doesn't sleep and needs no cron job.
+
+Electron and Flutter need **no** Render service of their own. The desktop build is a binary people
+install, the mobile build comes from a store or a direct download, and the web app is on Vercel. All
+three talk to this one API and the same database, so adding clients costs you no instance hours at all
+— only requests.
+
+## 9. Staying inside the free limits
+
+Watch **Render → your service → Metrics** for bandwidth and **Neon → your project → Usage** for compute
+hours. Neon's is the one more likely to bite first.
+
+Most of what the app sends never touches Render's meter — the globe's 32 MB of textures and tiles come
+from Vercel, photos and videos from Cloudinary, album art from Spotify, and call audio and video go
+device to device. Render only carries JSON and WebSocket frames. A few deliberate choices keep that
+small:
+
+- **Answers are compressed** (`@fastify/compress` in `app.ts`). JSON gzips to roughly a fifth of its
+  size, and nothing in front of this server does it for you.
+- **Nothing polls over HTTP.** New messages, presence, friend requests, tagged posts and now-playing
+  all arrive pushed down one WebSocket. The Spotify bar used to ask `/api/spotify/player` every four
+  seconds — about 900 requests an hour per open tab, which on its own was most of a month's budget.
+  The server asks Spotify once every 15 seconds for everyone online and pushes only what changed.
+- **Lists revalidate.** `/api/memories`, `/api/chat/conversations` and a conversation's messages carry
+  an ETag, so reopening the app when nothing has changed costs a 304 — a couple of hundred bytes
+  instead of the whole list.
+- **Uploads are capped**, in the app and again on the server (`backend/src/lib/uploads.ts`, `LIMITS`):
+  15 MB a photo on a post, 25 MB a file in a message, 10 MB for a profile picture. Photos are
+  re-encoded down to 2048px JPEG before they are stored, so what Cloudinary keeps is far smaller than
+  what was sent. Change the number in both places or they drift.
+
+Roughly, at 50 people using it properly, that comes to **well under a gigabyte a month** of Render
+traffic. The thing most likely to undo it is adding an endpoint that the app polls on a timer, or
+streaming a Cloudinary file through the API instead of handing back its URL — that puts the bytes on
+Render's meter for no reason.
+
+## 10. Check it
 
 1. Open <https://memoir-album.vercel.app>, create an account.
 2. Confirm the email (your inbox, or the link in Render's log).

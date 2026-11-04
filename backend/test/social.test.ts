@@ -137,6 +137,12 @@ test('a message with a photo, with the photo re-encoded and served', async () =>
   assert.equal(theirs.json().messages.at(-1).text, 'Look at this one')
   const list = await as(jack, 'GET', '/api/chat/conversations')
   assert.equal(list.json().conversations[0].unread, 1)
+
+  // a photo on its own, with nothing written: the browser sends no text field at all for this
+  const bare = await upload(maria, 'POST', `/api/chat/conversations/${conversationId}/messages`, {}, [await photo('#d04a3a')])
+  assert.equal(bare.statusCode, 200, bare.body)
+  assert.equal(bare.json().text, undefined)
+  assert.equal(bare.json().attachments.length, 1)
 })
 
 test('only the people in a conversation can read it', async () => {
@@ -263,6 +269,65 @@ test('Recently Deleted: trashed, restored, then deleted for good', async () => {
   await as(maria, 'POST', '/api/memories/trash', { ids: [memoryId] })
   await as(maria, 'POST', '/api/memories/purge', { ids: [memoryId] })
   assert.ok(!(await as(maria, 'GET', '/api/memories')).json().memories.some((m: { id: string }) => m.id === memoryId))
+})
+
+test('a file over the limit is refused, and says which file and what the limit is', async () => {
+  // the bytes never have to be a real picture: the limit is reached before anything decodes them
+  const huge = (mb: number) => ({ name: 'enormous.jpg', type: 'image/jpeg', data: Buffer.alloc(mb * 1024 * 1024, 7) })
+  const place = JSON.stringify({ place: { name: 'Manila', country: 'Philippines', lat: 14.6, lon: 120.98 } })
+
+  const post = await upload(maria, 'POST', '/api/memories', { draft: place }, [huge(16)])
+  assert.equal(post.statusCode, 413, post.body)
+  assert.equal(post.json().error.code, 'too-large')
+  assert.match(post.json().error.message, /enormous\.jpg/, 'names the file that was too big')
+  assert.match(post.json().error.message, /15 MB/, 'states the limit')
+
+  // a message may carry more, because videos are stored as they arrive rather than re-encoded
+  const message = await upload(maria, 'POST', `/api/chat/conversations/${conversationId}/messages`, {}, [huge(26)])
+  assert.equal(message.statusCode, 413, message.body)
+  assert.match(message.json().error.message, /25 MB/)
+
+  // and a file inside both limits is still accepted
+  const ok = await upload(maria, 'POST', `/api/chat/conversations/${conversationId}/messages`, {}, [await photo('#334455')])
+  assert.equal(ok.statusCode, 200, ok.body)
+})
+
+test('a list already held is answered with 304, not sent again', async () => {
+  // something of her own, so her list and a stranger's can't be the same bytes
+  const mine = await upload(maria, 'POST', '/api/memories', { draft: JSON.stringify({ place: { name: 'Cebu', country: 'Philippines', lat: 10.3, lon: 123.9 } }) }, [await photo('#206020')])
+  assert.equal(mine.statusCode, 200, mine.body)
+
+  const first = await as(maria, 'GET', '/api/memories')
+  assert.equal(first.statusCode, 200)
+  const etag = first.headers.etag as string
+  assert.ok(etag, 'the list carries an ETag')
+  assert.equal(first.headers['cache-control'], 'private, no-cache')
+
+  const again = await app.inject({ method: 'GET', url: '/api/memories', headers: { origin: ORIGIN, cookie: maria.cookie, 'if-none-match': etag } })
+  assert.equal(again.statusCode, 304, 'an unchanged list costs nothing to re-fetch')
+  assert.equal(again.body, '')
+
+  // the tag is a hash of the answer, so one account's can never unlock another's list
+  const theirs = await app.inject({ method: 'GET', url: '/api/memories', headers: { origin: ORIGIN, cookie: stranger.cookie, 'if-none-match': etag } })
+  assert.equal(theirs.statusCode, 200, 'a tag from an account with a different list must not be honoured')
+  assert.ok(!theirs.json().memories.length, 'and the stranger still sees nothing of hers')
+
+  // posting again changes the list, so the old tag stops matching
+  await upload(maria, 'POST', '/api/memories', { draft: JSON.stringify({ place: { name: 'Davao', country: 'Philippines', lat: 7.1, lon: 125.6 } }) }, [await photo('#602020')])
+  const stale = await app.inject({ method: 'GET', url: '/api/memories', headers: { origin: ORIGIN, cookie: maria.cookie, 'if-none-match': etag } })
+  assert.equal(stale.statusCode, 200, 'a changed list must be sent in full')
+})
+
+test('the keep-alive route answers without touching the database', async () => {
+  const ping = await app.inject({ method: 'GET', url: '/api/ping' })
+  assert.equal(ping.statusCode, 200)
+  assert.deepEqual(ping.json(), { ok: true })
+  // no session needed either: the cron job can't sign in
+  assert.equal(ping.headers['set-cookie'], undefined)
+
+  // /api/health is the deeper one, and does check the database
+  const health = await app.inject({ method: 'GET', url: '/api/health' })
+  assert.deepEqual(health.json(), { ok: true, db: true })
 })
 
 test('calls: the app is given STUN, and TURN credentials when one is set up', async () => {

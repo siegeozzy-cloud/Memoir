@@ -22,6 +22,7 @@
     "reset-link": "node --env-file-if-exists=.env src/dev/reset-link.ts"
   },
   "dependencies": {
+    "@fastify/compress": "^9.3.0",
     "@fastify/cookie": "^11.1.5",
     "@fastify/cors": "^11.3.1",
     "@fastify/multipart": "^10.1.6",

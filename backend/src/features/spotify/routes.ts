@@ -8,10 +8,13 @@ import { decrypt, encrypt } from '../../lib/crypto.ts'
 import { parse } from '../../lib/errors.ts'
 import { requireAuth, userOf } from '../../lib/session.ts'
 import { linkAccount, SCOPES, spotifyApi } from './client.ts'
+import { toPlayback, type ApiPlayer } from './playback.ts'
 
 // Linking: GET /connect sends the browser to Spotify's consent page; Spotify sends it back to /callback,
 // which stores the tokens and returns to the app with ?spotify=linked (or denied / error / unavailable).
-// Playback: the web app's player calls /player and the control routes; the server adds the token.
+// Playback: the web app's player asks /player once, when it opens, and is then told about every change
+// over the WebSocket (see activity.ts) rather than asking again. The control routes stay here, and each
+// one is a deliberate press of a button.
 
 /**
  * Starting the link is a plain browser navigation to Spotify, which can carry no header and (once the
@@ -29,40 +32,6 @@ function readState(state: string | undefined) {
     return until > Date.now() ? userId : null
   } catch {
     return null // tampered with, or from an older TOKEN_KEY
-  }
-}
-
-type ApiPlayer = {
-  is_playing: boolean
-  progress_ms: number | null
-  repeat_state: 'off' | 'context' | 'track'
-  item: {
-    id: string
-    name: string
-    duration_ms: number
-    type: string
-    artists?: { name: string }[]
-    album?: { name: string; images?: { url: string; width: number }[] }
-  } | null
-}
-
-/** Matches the web app's `Playback`, minus `at` (the app stamps the time it received it). */
-function toPlayback(p: ApiPlayer | null) {
-  if (!p?.item || p.item.type !== 'track') return null // nothing playing, an ad, or a podcast
-  const images = p.item.album?.images ?? []
-  const art = images.find((i) => i.width <= 320) ?? images[images.length - 1]
-  return {
-    track: {
-      id: p.item.id,
-      title: p.item.name,
-      artists: (p.item.artists ?? []).map((a) => a.name).join(', '),
-      album: p.item.album?.name ?? '',
-      artUrl: art?.url,
-      durationMs: p.item.duration_ms,
-    },
-    isPlaying: p.is_playing,
-    progressMs: p.progress_ms ?? 0,
-    repeat: p.repeat_state,
   }
 }
 

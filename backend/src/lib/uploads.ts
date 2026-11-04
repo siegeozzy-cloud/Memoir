@@ -59,18 +59,43 @@ export async function deleteMedia(files: Iterable<string>) {
 
 export type Upload = { data: Buffer; filename: string; mimetype: string }
 
+const MB = 1024 * 1024
+
+/** The most one file may weigh, per place it can be sent from. The web app checks the same numbers. */
+export const LIMITS = {
+  /** A photo posted to the globe. Pictures are re-encoded here, so the stored copy is far smaller. */
+  memory: 15 * MB,
+  /** An attachment in a message, where videos are kept as they arrive. */
+  chat: 25 * MB,
+  avatar: 10 * MB,
+} as const
+
 /**
- * Reads a multipart request: text fields, and the files under `fileField`.
- * Rejects anything that isn't a picture or a video before it reaches storage.
+ * Reads a multipart request: text fields, and the files under `files`.
+ * Rejects anything that isn't a picture or a video, or is over `maxBytes`, before it reaches storage.
  */
-export async function readMultipart(req: { parts: (o?: object) => AsyncIterableIterator<Record<string, unknown>> }, maxFiles = 20) {
+export async function readMultipart(
+  req: { parts: (o?: object) => AsyncIterableIterator<Record<string, unknown>> },
+  { maxFiles = 20, maxBytes = LIMITS.chat }: { maxFiles?: number; maxBytes?: number } = {},
+) {
   const fields: Record<string, string> = {}
   const files: Upload[] = []
-  for await (const part of req.parts({ limits: { files: maxFiles, fileSize: 64 * 1024 * 1024 } })) {
+  for await (const part of req.parts({ limits: { files: maxFiles, fileSize: maxBytes } })) {
     if (part.type === 'file') {
       const mimetype = String(part.mimetype ?? '')
+      const filename = String(part.filename ?? 'file')
       if (!/^(image|video)\//.test(mimetype)) throw new HttpError(400, 'bad-file', 'Only pictures and videos can be sent.', 'files')
-      files.push({ data: await (part as { toBuffer(): Promise<Buffer> }).toBuffer(), filename: String(part.filename ?? 'file'), mimetype })
+      let data: Buffer
+      try {
+        data = await (part as { toBuffer(): Promise<Buffer> }).toBuffer()
+      } catch (e) {
+        // @fastify/multipart stops reading at the limit and throws; say which file and what the limit is
+        if ((e as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE') {
+          throw new HttpError(413, 'too-large', `${filename} is over ${Math.round(maxBytes / MB)} MB, the most one file can be.`, 'files')
+        }
+        throw e
+      }
+      files.push({ data, filename, mimetype })
     } else {
       fields[String(part.fieldname)] = String(part.value)
     }

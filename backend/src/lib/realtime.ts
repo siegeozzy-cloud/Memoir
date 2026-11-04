@@ -9,10 +9,10 @@ import { chooseProtocol, requireAuth, userOf } from './session.ts'
 
 /**
  * One WebSocket per open tab, at /api/ws, for everything that arrives without being asked for:
- * new messages, presence, friend requests, posts you've been tagged in, and call signalling.
- * Each message is { channel, ... }; the browser ignores channels it doesn't know.
+ * new messages, presence, friend requests, posts you've been tagged in, what you're playing, and
+ * call signalling. Each message is { channel, ... }; the browser ignores channels it doesn't know.
  */
-export type Push = { channel: 'chat' | 'memories' | 'friends' | 'call'; [key: string]: unknown }
+export type Push = { channel: 'chat' | 'memories' | 'friends' | 'call' | 'spotify'; [key: string]: unknown }
 
 const sockets = new Map<string, Set<WebSocket>>()
 const activities = new Map<string, Activity | null>()

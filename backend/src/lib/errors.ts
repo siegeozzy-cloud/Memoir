@@ -35,8 +35,9 @@ export function errorHandler(err: FastifyError | HttpError, req: FastifyRequest,
   if (err.statusCode === 429) {
     return reply.code(429).send({ error: { code: 'rate-limited', message: 'Too many attempts. Wait a minute and try again.' } })
   }
+  // the routes catch this themselves and say which file and which limit; this is the backstop
   if (err.code === 'FST_REQ_FILE_TOO_LARGE') {
-    return reply.code(413).send({ error: { code: 'too-large', message: 'Pick a picture under 8 MB.' } })
+    return reply.code(413).send({ error: { code: 'too-large', message: 'That file is too large to upload.', field: 'files' } })
   }
   if (err.statusCode && err.statusCode < 500) {
     return reply.code(err.statusCode).send({ error: { code: 'bad-request', message: 'That request wasn’t understood.' } })

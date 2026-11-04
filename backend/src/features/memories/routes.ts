@@ -5,9 +5,10 @@ import { db } from '../../db/client.ts'
 import { friendships, memories, memoryItems, memoryTags } from '../../db/schema.ts'
 import { HttpError, parse } from '../../lib/errors.ts'
 import { send } from '../../lib/realtime.ts'
+import { revalidate } from '../../lib/revalidate.ts'
 import { avatarUrl } from '../auth/users.ts'
 import { requireAuth, userOf } from '../../lib/session.ts'
-import { deleteMedia, jsonField, mediaUrl, readMultipart, saveMedia, type StoredMedia } from '../../lib/uploads.ts'
+import { deleteMedia, jsonField, LIMITS, mediaUrl, readMultipart, saveMedia, type StoredMedia } from '../../lib/uploads.ts'
 
 // Posts and albums pinned on the globe. A post is private to its owner and the people tagged in it;
 // every read here filters on that, so it can't be worked around from the browser.
@@ -97,15 +98,20 @@ async function pushUpsert(id: string) {
 export default async function memoryRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireAuth)
 
-  app.get('/', async (req) => {
+  /**
+   * Every post the globe has a pin for, so this one isn't paginated — the map needs all of them at
+   * once. It is instead revalidated: reopening the app when nothing has been posted since costs a
+   * 304 rather than the whole list again.
+   */
+  app.get('/', async (req, reply) => {
     const rows = await db.select().from(memories).where(visibleTo(userOf(req).id)).limit(500)
-    return { memories: await shape(rows) }
+    return revalidate(req, reply, { memories: await shape(rows) })
   })
 
   /** multipart/form-data: a `draft` field (JSON) and the photos as `files`. */
   app.post('/', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req) => {
     const me = userOf(req).id
-    const { fields, files } = await readMultipart(req as never, MAX_ITEMS)
+    const { fields, files } = await readMultipart(req as never, { maxFiles: MAX_ITEMS, maxBytes: LIMITS.memory })
     const draft = parse(Draft, jsonField(fields, 'draft'))
     if (!files.length) throw new HttpError(400, 'empty', 'Add at least one photo.', 'files')
     const taggedIds = await checkTags(me, draft.taggedIds)
@@ -143,7 +149,7 @@ export default async function memoryRoutes(app: FastifyInstance) {
     const me = userOf(req).id
     const { id } = req.params as { id: string }
     const before = await ownedOrFail(id, me)
-    const { fields, files } = await readMultipart(req as never, MAX_ITEMS)
+    const { fields, files } = await readMultipart(req as never, { maxFiles: MAX_ITEMS, maxBytes: LIMITS.memory })
     const patch = parse(Patch, jsonField(fields, 'patch') ?? {})
     const wasTagged = (await db.select({ userId: memoryTags.userId }).from(memoryTags).where(eq(memoryTags.memoryId, id))).map((t) => t.userId)
     const taggedIds = patch.taggedIds ? await checkTags(me, patch.taggedIds) : undefined

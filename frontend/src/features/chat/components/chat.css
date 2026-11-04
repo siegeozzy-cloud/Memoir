@@ -60,7 +60,9 @@
   cursor: default;
 }
 
-.chat-mobile-bar {
+/* The way out of the panel. Hidden on a wide window, where the dock is still visible beside it;
+   shown as soon as the panel covers the dock — see the breakpoint near the end of this file. */
+.chat-back-bar {
   display: none;
 }
 
@@ -743,6 +745,14 @@
   border-radius: 20px;
 }
 
+/* why a file wasn't attached: too large, too many, or not a photo or video */
+.composer-problem {
+  margin: 0 4px 8px;
+  color: #ff6b6b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .composer-row {
   display: flex;
   align-items: flex-end;
@@ -1164,20 +1174,33 @@
 
 /* ---------- small screens: full-screen panel with a back button ---------- */
 
-@media (max-width: 760px) {
-  .chat {
-    top: 0;
-    width: 100vw;
-    border-radius: 0;
-    padding-top: env(safe-area-inset-top, 0px);
-  }
-  .chat-mobile-bar {
+/* When the panel covers the dock, it has to carry its own way out.
+
+   The panel is pinned to the right and is 576px wide; the dock sits at the middle of the window and
+   is 168px across. So the panel's left edge meets the dock's right edge at 2 × (576 + 84) = 1320px,
+   and below that the Messages button that opened the panel is behind it, along with the rest of the
+   dock. Escape closes the panel at any width, but nothing on screen says so.
+
+   The arrow takes over at 1360 rather than 1320, so the dock is never left flush against the panel's
+   edge with nowhere to go. This used to appear only below 760px, which left every window between
+   760 and 1320 with the dock hidden and no visible way back. */
+@media (max-width: 1360px) {
+  .chat-back-bar {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 8px 12px 0 8px;
     font-size: 17px;
     font-weight: 600;
+  }
+}
+
+@media (max-width: 760px) {
+  .chat {
+    top: 0;
+    width: 100vw;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top, 0px);
   }
   .people-bar {
     padding: 8px 12px 0 16px;

@@ -71,18 +71,38 @@ export function useSpotify(signedIn: boolean) {
     }
   }, [source])
 
-  // poll while the page is visible (Spotify has no push API for the web)
+  /**
+   * Ask once, then be told.
+   *
+   * Spotify has no push API, so somebody has to ask it — but that somebody is the server, which is
+   * already doing it for the "Listening to Spotify" label on friends' names. It pushes a change down
+   * the WebSocket, and the position in between is worked out from the clock by usePlaybackPosition.
+   * The demo source has nothing to push to, so it is still polled; it never leaves the tab.
+   */
   useEffect(() => {
     if (!source) return
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async: state is set after the network call
     refresh()
-    const every = source.kind === 'demo' ? 1000 : 4000
-    const t = setInterval(() => document.visibilityState === 'visible' && refresh(), every)
-    const onVisible = () => document.visibilityState === 'visible' && refresh()
+
+    /**
+     * Coming back to the tab, ask once in case a push was missed while the laptop slept — the socket
+     * reconnects quietly, but the server only sends what has changed since, so a sleeping tab can be
+     * holding a song that finished an hour ago. Throttled, so flicking between tabs isn't a flood.
+     */
+    let lastAsk = Date.now()
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastAsk < 10_000) return
+      lastAsk = Date.now()
+      refresh()
+    }
     document.addEventListener('visibilitychange', onVisible)
+    const stop = source.subscribe?.((playback) => setSnap({ kind: source.kind, playback }))
+    const poll = source.subscribe ? undefined : setInterval(() => document.visibilityState === 'visible' && refresh(), 1000)
+
     return () => {
-      clearInterval(t)
       document.removeEventListener('visibilitychange', onVisible)
+      stop?.()
+      clearInterval(poll)
     }
   }, [source, refresh])
 

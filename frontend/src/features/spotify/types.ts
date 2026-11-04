@@ -24,6 +24,12 @@ export interface PlayerSource {
   readonly kind: 'spotify' | 'demo'
   /** null when nothing is playing (or no device is active). */
   current(): Promise<Playback | null>
+  /**
+   * Told about every change after `current()`, so the player needn't ask again. The real source
+   * listens to the WebSocket, which the server pushes to when a track changes; the demo leaves this
+   * out and is polled instead, since it costs nothing to ask something running in the same tab.
+   */
+  subscribe?(listener: (playback: Playback | null) => void): () => void
   play(): Promise<void>
   pause(): Promise<void>
   next(): Promise<void>
