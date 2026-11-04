@@ -5,6 +5,8 @@ export type Attachment = {
   id: string
   kind: 'image' | 'video'
   url: string
+  /** A tile-sized copy, where there is one. See `MediaItem.thumbUrl` — read it as `thumbUrl ?? url`. */
+  thumbUrl?: string
   name: string
   width?: number
   height?: number

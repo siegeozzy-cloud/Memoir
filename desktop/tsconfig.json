@@ -1,0 +1,19 @@
+{
+  // Electron's main process runs compiled JavaScript, so unlike the backend this one does emit.
+  "compilerOptions": {
+    "target": "es2023",
+    // node16 picks CommonJS from this package.json having no "type": "module", which is what
+    // Electron's main process wants. Plain "node" resolution was removed in TypeScript 7.
+    "module": "node16",
+    "outDir": "out",
+    "rootDir": "src",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

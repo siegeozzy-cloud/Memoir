@@ -16,6 +16,10 @@ dist-ssr
 !.env.example
 backend/uploads
 
+# desktop: the compiled main process, and the installers electron-builder packs
+desktop/out
+desktop/release
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

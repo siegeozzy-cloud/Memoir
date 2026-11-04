@@ -1,9 +1,7 @@
-import { eq, inArray } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
-import { db } from '../../db/client.ts'
-import { spotifyLinks, users } from '../../db/schema.ts'
 import { isOnline, onlineUserIds, send, setActivity } from '../../lib/realtime.ts'
-import { spotifyApi } from './client.ts'
+import { cachedUser } from '../../lib/user-cache.ts'
+import { hasSpotifyLink, spotifyApi } from './client.ts'
 import { playbackSignature, toPlayback, worthSending, type ApiPlayer, type Playback, type Sent } from './playback.ts'
 
 // Two things come out of one question to Spotify: "Listening to Spotify" on a friend's name, like
@@ -117,10 +115,7 @@ async function poll(person: Person) {
 /** One person, looked up and asked about — for the booked checks, which have only an id to go on. */
 async function lookAt(userId: string) {
   if (!server || !isOnline(userId)) return
-  const [person] = await db
-    .select({ id: users.id, status: users.status, shareActivity: users.shareActivity })
-    .from(users)
-    .where(eq(users.id, userId))
+  const person = await cachedUser(userId)
   if (person) await poll(person)
 }
 
@@ -138,9 +133,18 @@ export function nudge(userId: string) {
 }
 
 /**
- * One pass over everyone with an open tab. Two queries for the whole sweep, whatever the number of
- * people — it used to be two per person, which at fifty online was a query every few milliseconds
- * against a database that bills by the time it spends awake.
+ * One pass over everyone with an open tab.
+ *
+ * **No queries at all, in the steady state.** Who is online comes from memory, and so now do the
+ * two things this needs to know about each of them — their status and sharing preference
+ * (lib/user-cache.ts) and whether they have Spotify linked (client.ts). That matters because this
+ * runs every ten seconds for as long as *anybody* is connected: when it read those from Postgres,
+ * a database that suspends itself after a few minutes idle never got the chance, and the free
+ * plan's monthly compute allowance went on a timer rather than on anybody using the app. Now a
+ * room full of connected people who aren't touching anything costs nothing until they do.
+ *
+ * Each cache falls back to a read the first time it sees someone, so a restart warms up over the
+ * first sweep or two and is quiet after that.
  */
 async function sweep() {
   const online = onlineUserIds()
@@ -152,17 +156,17 @@ async function sweep() {
   }
   if (!online.length) return
 
-  const [people, links] = await Promise.all([
-    db.select({ id: users.id, status: users.status, shareActivity: users.shareActivity }).from(users).where(inArray(users.id, online)),
-    db.select({ userId: spotifyLinks.userId }).from(spotifyLinks).where(inArray(spotifyLinks.userId, online)),
-  ])
-  const linked = new Set(links.map((l) => l.userId))
-
-  // no linked account: nothing to ask Spotify, and nothing to show on their name
-  for (const person of people) {
-    if (linked.has(person.id)) continue
-    sent.delete(person.id)
-    await setActivity(person.id, null)
+  const linked: Person[] = []
+  for (const id of online) {
+    const person = await cachedUser(id)
+    if (!person) continue
+    if (await hasSpotifyLink(id)) {
+      linked.push(person)
+      continue
+    }
+    // no linked account: nothing to ask Spotify, and nothing to show on their name
+    sent.delete(id)
+    await setActivity(id, null)
   }
 
   /**
@@ -170,7 +174,7 @@ async function sweep() {
    * — they are still using the app, so their own player has to keep working; it is only what their
    * friends see that is held back, in `poll`.
    */
-  await mapLimit(people.filter((p) => linked.has(p.id)), AT_ONCE, poll)
+  await mapLimit(linked, AT_ONCE, poll)
 }
 
 export function startActivityPolling(app: FastifyInstance) {

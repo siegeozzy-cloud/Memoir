@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Memoir</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #0b0b0d;
+        color: #e7e7ea;
+        padding: 2rem;
+        box-sizing: border-box;
+      }
+      main {
+        max-width: 26rem;
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin: 0 0 0.5rem;
+      }
+      p {
+        margin: 0 0 1.5rem;
+        line-height: 1.6;
+        color: #a0a0a8;
+        font-size: 0.9375rem;
+      }
+      button {
+        font: inherit;
+        font-weight: 500;
+        color: #0b0b0d;
+        background: #e7e7ea;
+        border: 0;
+        border-radius: 8px;
+        padding: 0.5rem 1.25rem;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #fff;
+      }
+      code {
+        display: block;
+        margin-top: 1.5rem;
+        font-size: 0.75rem;
+        color: #55555e;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Can’t reach Memoir</h1>
+      <!-- The server is on a free plan that sleeps after 15 minutes idle, so the first visit after a
+           quiet spell genuinely does take up to a minute. That is the likeliest cause by far, which
+           is why it is said before "check your connection". -->
+      <p>
+        The server may be waking up, which can take up to a minute. If it keeps failing, check your
+        internet connection.
+      </p>
+      <button type="button" id="retry" hidden>Try again</button>
+      <code id="detail"></code>
+    </main>
+    <script>
+      /*
+       * This page is a plain file with no Node, no preload and no IPC — the window is sandboxed —
+       * so main.ts hands it both the address to go back to and the reason it failed, in the
+       * fragment. Navigating to the app from here goes through `will-navigate`, which allows that
+       * one origin.
+       */
+      const params = new URLSearchParams(location.hash.slice(1))
+      const app = params.get('url')
+      const detail = params.get('reason')
+
+      if (detail) document.getElementById('detail').textContent = detail
+      const retry = document.getElementById('retry')
+      if (app) {
+        retry.hidden = false
+        retry.addEventListener('click', () => location.replace(app))
+      }
+    </script>
+  </body>
+</html>

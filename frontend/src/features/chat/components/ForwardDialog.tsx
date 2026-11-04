@@ -54,7 +54,7 @@ export default function ForwardDialog({ message, friends, onSend, onClose }: Pro
 
         <div className="fwd-preview">
           {first &&
-            (first.kind === 'video' ? <video src={first.url} muted preload="metadata" /> : <img src={first.url} alt="" />)}
+            (first.kind === 'video' ? <video src={first.url} muted preload="metadata" /> : <img src={first.thumbUrl ?? first.url} alt="" />)}
           <p>{message.text || (message.attachments.length > 1 ? `${message.attachments.length} photos and videos` : first?.kind === 'video' ? 'Video' : 'Photo')}</p>
         </div>
 

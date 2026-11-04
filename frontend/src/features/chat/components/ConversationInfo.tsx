@@ -100,7 +100,7 @@ export default function ConversationInfo({ conversation, other, meId, messages =
                     </span>
                   </>
                 ) : (
-                  <img src={a.url} alt="" loading="lazy" />
+                  <img src={a.thumbUrl ?? a.url} alt="" loading="lazy" />
                 )}
               </button>
             ))}
@@ -118,7 +118,7 @@ export default function ConversationInfo({ conversation, other, meId, messages =
           <div className="tagged-list">
             {tagged.map((m) => (
               <button key={m.id} type="button" className="tagged" onClick={() => onShowMemory(m)} aria-label={`${m.title}, ${m.place.name}. Open`}>
-                {m.items[0] && <img src={m.items[0].url} alt="" />}
+                {m.items[0] && <img src={m.items[0].thumbUrl ?? m.items[0].url} alt="" />}
                 <span className="tagged-text">
                   <strong>{m.title}</strong>
                   <span>

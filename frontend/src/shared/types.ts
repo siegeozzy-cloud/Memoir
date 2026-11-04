@@ -29,6 +29,12 @@ export type MediaItem = {
   id: string
   kind: 'image' | 'video'
   url: string
+  /**
+   * A small copy of the same picture, for showing it at tile size. Absent for a video, and when the
+   * backend is storing files in a local folder (development), which has nothing to resize with —
+   * so always read it as `thumbUrl ?? url`.
+   */
+  thumbUrl?: string
   name?: string
   width?: number
   height?: number

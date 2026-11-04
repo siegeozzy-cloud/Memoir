@@ -192,7 +192,9 @@ function Media({ items }: { items: Attachment[] }) {
         a.kind === 'video' ? (
           <video key={a.id} src={a.url} controls preload="metadata" playsInline aria-label={a.name} />
         ) : (
-          <img key={a.id} src={a.url} alt={a.name} width={a.width} height={a.height} loading="lazy" />
+          // the bubble is 300px wide at most and there is nothing to open the full picture with,
+          // so the full-size file would never be seen at its size — see MediaItem.thumbUrl
+          <img key={a.id} src={a.thumbUrl ?? a.url} alt={a.name} width={a.width} height={a.height} loading="lazy" />
         ),
       )}
     </div>

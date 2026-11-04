@@ -8,6 +8,55 @@ import { HttpError } from '../../lib/errors.ts'
 // Spotify's Web API on behalf of a user. Tokens never leave the server: they're stored encrypted,
 // refreshed here when they're about to expire, and the web app only sees the playback they unlock.
 
+type LinkRow = typeof spotifyLinks.$inferSelect
+
+/**
+ * The stored link, held in memory per person. `null` means "asked, and there isn't one".
+ *
+ * Every call to Spotify needs the access token, and the background sweep makes one per listener
+ * every ten seconds — which used to be a database read every ten seconds, each one keeping a
+ * serverless Postgres from ever suspending. The row only changes when somebody links, unlinks or
+ * the hourly refresh runs, and all three go through this file, so it can be cached and written
+ * through. Caching the absence matters just as much: without it, everyone who has *not* linked
+ * Spotify cost a query per sweep forever. See lib/user-cache.ts for the whole story.
+ *
+ * The database stays the source of truth — the refresh token rotates and has to survive a restart.
+ * One server's memory, like presence; two servers need Redis (docs/roadmap.md).
+ *
+ * **The absence is cached permanently, on purpose, and that has a cost.** A short-lived negative
+ * entry would defeat the whole point: re-checking every few minutes is itself enough to stop a
+ * serverless database ever suspending, which is the thing being avoided. So "this person has no
+ * link" is believed until they link, unlink or the server restarts. A row that appears by any other
+ * route — a restored backup, a hand-written `insert`, a test setting up state — is invisible until
+ * one of those happens. Call `forgetSpotifyLink` if you are that other route.
+ */
+const links = new Map<string, LinkRow | null>()
+
+/** Written through on every change below, so what is held can't drift from the row. */
+const remember = (userId: string, link: LinkRow | null) => links.set(userId, link)
+
+/**
+ * Re-read this person's link next time it's needed. Called when their last socket closes (wired up
+ * in app.ts), so this can't grow without limit — and by the unlink route, which writes the row from
+ * outside this file and would otherwise leave a link cached that is no longer there.
+ */
+export const forgetSpotifyLink = (userId: string) => void links.delete(userId)
+
+/** The link, from memory if we've looked before. */
+export async function spotifyLinkOf(userId: string): Promise<LinkRow | null> {
+  const held = links.get(userId)
+  if (held !== undefined) return held
+  const row = (await db.query.spotifyLinks.findFirst({ where: eq(spotifyLinks.userId, userId) })) ?? null
+  remember(userId, row)
+  return row
+}
+
+/**
+ * Whether this person has Spotify linked, for the sweep deciding who is worth asking about.
+ * A cache hit after the first look, so a room full of people who don't use Spotify costs nothing.
+ */
+export const hasSpotifyLink = async (userId: string) => (await spotifyLinkOf(userId)) !== null
+
 export const SCOPES = ['user-read-playback-state', 'user-read-currently-playing', 'user-modify-playback-state']
 
 type TokenResponse = { access_token: string; refresh_token?: string; expires_in: number; scope: string }
@@ -38,7 +87,8 @@ export async function linkAccount(userId: string, code: string) {
     scope: t.scope,
     updatedAt: new Date(),
   }
-  await db.insert(spotifyLinks).values({ userId, ...row }).onConflictDoUpdate({ target: spotifyLinks.userId, set: row })
+  const [saved] = await db.insert(spotifyLinks).values({ userId, ...row }).onConflictDoUpdate({ target: spotifyLinks.userId, set: row }).returning()
+  remember(userId, saved ?? null)
 }
 
 const refreshing = new Map<string, Promise<string>>()
@@ -62,13 +112,14 @@ async function readToken(sealed: string, userId: string) {
     // awaited, so by the time the browser is told to link again the dead row is already gone and
     // /status agrees with the answer it just got
     await db.delete(spotifyLinks).where(eq(spotifyLinks.userId, userId))
+    remember(userId, null)
     throw unlinked('Spotify needs linking again.')
   }
 }
 
 /** A valid access token for this user, refreshed when it's within a minute of expiring. */
 async function accessToken(userId: string, force = false): Promise<string> {
-  const link = await db.query.spotifyLinks.findFirst({ where: eq(spotifyLinks.userId, userId) })
+  const link = await spotifyLinkOf(userId)
   if (!link) throw unlinked('Link Spotify in your profile first.')
   if (!force && link.expiresAt.getTime() - Date.now() > 60_000) return await readToken(link.accessToken, userId)
   // one refresh per user at a time, however many requests arrive together
@@ -77,7 +128,7 @@ async function accessToken(userId: string, force = false): Promise<string> {
     pending = (async () => {
       try {
         const t = await tokenRequest({ grant_type: 'refresh_token', refresh_token: await readToken(link.refreshToken, userId) })
-        await db
+        const [saved] = await db
           .update(spotifyLinks)
           .set({
             accessToken: encrypt(t.access_token),
@@ -86,10 +137,14 @@ async function accessToken(userId: string, force = false): Promise<string> {
             updatedAt: new Date(),
           })
           .where(eq(spotifyLinks.userId, userId))
+          .returning()
+        // the new token and its expiry, so the next hour of calls read none of this back
+        remember(userId, saved ?? null)
         return t.access_token
       } catch (e) {
         // the person revoked Memoir's access in their Spotify settings: forget the link
         await db.delete(spotifyLinks).where(eq(spotifyLinks.userId, userId))
+        remember(userId, null)
         throw e instanceof HttpError ? new HttpError(409, 'spotify-unlinked', 'Spotify was disconnected. Link it again in your profile.') : e
       } finally {
         refreshing.delete(userId)

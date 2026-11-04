@@ -56,9 +56,26 @@ export default function Composer({ placeholder, onSend }: Props) {
 
     const space = MAX_FILES - pickedRef.current.length
     if (ok.length > space) problems.push(`A message carries up to ${MAX_FILES} files.`)
+
+    /**
+     * And a ceiling on the lot of them. Each one is already under the single-file limit, but ten
+     * videos at that size is a quarter of a gigabyte through the server for one message — so they
+     * are taken in order until the allowance runs out, and the rest are left behind with a reason.
+     * The server checks the same number (MAX_TOTAL_BYTES.chat) and would refuse the whole message.
+     */
+    let room = CHAT_UPLOAD.maxTotalBytes - pickedRef.current.reduce((sum, p) => sum + p.file.size, 0)
+    const fits: File[] = []
+    for (const f of ok.slice(0, Math.max(0, space))) {
+      if (f.size > room) {
+        problems.push(`Those come to more than ${CHAT_UPLOAD.maxTotalBytes / MB} MB together. Send them over a few messages.`)
+        break
+      }
+      room -= f.size
+      fits.push(f)
+    }
     setProblem(problems[0] ?? null)
 
-    const fresh = ok.slice(0, Math.max(0, space)).map((file) => ({
+    const fresh = fits.map((file) => ({
       file,
       url: URL.createObjectURL(file),
       kind: file.type.startsWith('video/') ? ('video' as const) : ('image' as const),

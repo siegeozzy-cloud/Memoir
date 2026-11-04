@@ -17,6 +17,7 @@ import chatRoutes from './features/chat/routes.ts'
 import friendRoutes from './features/friends/routes.ts'
 import memoryRoutes, { purgeOldMemories } from './features/memories/routes.ts'
 import { startActivityPolling } from './features/spotify/activity.ts'
+import { forgetSpotifyLink } from './features/spotify/client.ts'
 import spotifyRoutes from './features/spotify/routes.ts'
 import { errorHandler, HttpError } from './lib/errors.ts'
 import { onDisconnect, registerRealtime } from './lib/realtime.ts'
@@ -90,6 +91,7 @@ export async function buildApp() {
   await registerRealtime(app)
   registerCallSignalling()
   onDisconnect(dropCallsOf) // closing the last tab hangs up
+  onDisconnect(forgetSpotifyLink) // and stops us holding their Spotify link in memory
 
   /**
    * "Is the server up?" — and nothing else. This is what the host's health check and the keep-alive

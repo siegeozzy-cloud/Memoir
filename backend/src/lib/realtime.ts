@@ -1,11 +1,10 @@
 import websocket from '@fastify/websocket'
-import { eq } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
 import type { WebSocket } from 'ws'
-import { db } from '../db/client.ts'
-import { friendships, users, type UserRow } from '../db/schema.ts'
+import type { UserRow } from '../db/schema.ts'
 import { publicUser, type Activity } from '../features/auth/users.ts'
 import { chooseProtocol, requireAuth, userOf } from './session.ts'
+import { cachedUser, cachedUsers, friendsOf, unwatchUser, watchUser } from './user-cache.ts'
 
 /**
  * One WebSocket per open tab, at /api/ws, for everything that arrives without being asked for:
@@ -38,8 +37,8 @@ export function sendToAll(userIds: Iterable<string>, push: Push) {
 /** Handles one kind of message from the browser, e.g. 'call:invite'. */
 export const onPush = (type: string, handler: Handler) => handlers.set(type, handler)
 
-export const friendIdsOf = async (userId: string) =>
-  (await db.select({ id: friendships.friendId }).from(friendships).where(eq(friendships.userId, userId))).map((r) => r.id)
+/** Cached while they're online — see lib/user-cache.ts for why that matters. */
+export const friendIdsOf = friendsOf
 
 /**
  * What friends see: the status the person chose while they have the app open, otherwise offline.
@@ -55,9 +54,9 @@ export function presenceOf(user: Pick<UserRow, 'id' | 'status' | 'shareActivity'
 
 /** Tells this person's friends how they look now (status, and what they're playing). */
 export async function announcePresence(userId: string) {
-  const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
+  const user = await cachedUser(userId)
   if (!user) return
-  const friends = await friendIdsOf(userId)
+  const friends = await friendsOf(userId)
   if (friends.length) sendToAll(friends, { channel: 'chat', event: { type: 'presence', user: publicUser(user, presenceOf(user)) } })
 }
 
@@ -80,11 +79,14 @@ export async function registerRealtime(app: FastifyInstance) {
     const mine = sockets.get(user.id) ?? new Set()
     mine.add(socket)
     sockets.set(user.id, mine)
+    // from here until their last socket closes, presence costs no queries (lib/user-cache.ts). The
+    // row is the one the session check already loaded, so starting the cache is free.
+    watchUser(user)
     if (mine.size === 1) void announcePresence(user.id) // their first open tab: they're online now
 
     // the browser is told who else is around; it asks for everything else over HTTP
-    void friendIdsOf(user.id).then(async (friends) => {
-      const rows = friends.length ? await db.query.users.findMany({ where: (u, { inArray }) => inArray(u.id, friends) }) : []
+    void friendsOf(user.id).then(async (friends) => {
+      const rows = friends.length ? await cachedUsers(friends) : []
       socket.send(JSON.stringify({ channel: 'chat', event: { type: 'hello', friends: rows.map((f) => publicUser(f, presenceOf(f))) } }))
     })
 
@@ -116,7 +118,9 @@ export async function registerRealtime(app: FastifyInstance) {
         sockets.delete(user.id)
         activities.delete(user.id)
         for (const fn of onGone) fn(user.id)
-        void announcePresence(user.id) // last tab closed: they're offline
+        // last tab closed: they're offline. Announced before the cache is let go, so saying so
+        // costs no query either — then nothing of theirs is held any more.
+        void announcePresence(user.id).finally(() => unwatchUser(user.id))
       }
     })
   })

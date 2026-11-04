@@ -6,6 +6,7 @@ import { users } from '../../db/schema.ts'
 import { HttpError, parse } from '../../lib/errors.ts'
 import { announcePresence } from '../../lib/realtime.ts'
 import { endAllSessions, requireAuth, userOf } from '../../lib/session.ts'
+import { friendsChanged, friendsOf, userChanged } from '../../lib/user-cache.ts'
 import { LIMITS } from '../../lib/uploads.ts'
 import { nameSchema, statusSchema } from '../../lib/validation.ts'
 import { profileOf } from '../auth/users.ts'
@@ -41,6 +42,8 @@ export default async function accountRoutes(app: FastifyInstance) {
       })
       .where(eq(users.id, userOf(req).id))
       .returning()
+    // the status and sharing preference the presence path reads from memory just changed
+    userChanged(user)
     // friends see the new status, name or what you're playing straight away
     void announcePresence(user.id)
     return profileOf(user)
@@ -62,6 +65,8 @@ export default async function accountRoutes(app: FastifyInstance) {
     const file = await saveAvatar(upload)
     const before = userOf(req).avatarFile
     const [user] = await db.update(users).set({ avatarFile: file, updatedAt: new Date() }).where(eq(users.id, userOf(req).id)).returning()
+    // friends' lists carry the avatar, and presence is answered from memory
+    userChanged(user)
     await deleteAvatar(before)
     return profileOf(user)
   })
@@ -77,8 +82,12 @@ export default async function accountRoutes(app: FastifyInstance) {
   /** Deletes the account for good. Sessions, email links and the Spotify link go with it (cascade). */
   app.delete('/', async (req, reply) => {
     const user = userOf(req)
+    // read before the cascade takes the friendships away, so the people who are about to stop being
+    // friends with them reload their list rather than holding one that names a user who is gone
+    const friends = await friendsOf(user.id)
     await endAllSessions(user.id, reply)
     await db.delete(users).where(eq(users.id, user.id))
+    friendsChanged(user.id, ...friends)
     await deleteAvatar(user.avatarFile)
     return reply.code(204).send()
   })

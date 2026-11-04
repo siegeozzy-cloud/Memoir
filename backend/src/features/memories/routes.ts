@@ -8,7 +8,7 @@ import { send } from '../../lib/realtime.ts'
 import { revalidate } from '../../lib/revalidate.ts'
 import { avatarUrl } from '../auth/users.ts'
 import { requireAuth, userOf } from '../../lib/session.ts'
-import { deleteMedia, jsonField, LIMITS, mediaUrl, readMultipart, saveMedia, type StoredMedia } from '../../lib/uploads.ts'
+import { deleteMedia, jsonField, LIMITS, mediaThumbUrl, mediaUrl, readMultipart, saveMedia, type StoredMedia } from '../../lib/uploads.ts'
 
 // Posts and albums pinned on the globe. A post is private to its owner and the people tagged in it;
 // every read here filters on that, so it can't be worked around from the browser.
@@ -53,7 +53,18 @@ async function shape(rows: Row[]) {
     place: { name: m.placeName, country: m.country, ...(m.countryCode ? { countryCode: m.countryCode } : {}), lat: m.lat, lon: m.lon },
     items: items
       .filter((i) => i.memoryId === m.id)
-      .map((i) => ({ id: i.id, kind: i.kind, url: mediaUrl(i.file, i.kind), ...(i.name ? { name: i.name } : {}), ...(i.width ? { width: i.width } : {}), ...(i.height ? { height: i.height } : {}) })),
+      .map((i) => {
+        const thumbUrl = mediaThumbUrl(i.file, i.kind)
+        return {
+          id: i.id,
+          kind: i.kind,
+          url: mediaUrl(i.file, i.kind),
+          ...(thumbUrl ? { thumbUrl } : {}),
+          ...(i.name ? { name: i.name } : {}),
+          ...(i.width ? { width: i.width } : {}),
+          ...(i.height ? { height: i.height } : {}),
+        }
+      }),
     taggedIds: tags.filter((t) => t.memoryId === m.id).map((t) => t.userId),
     capturedAt: m.capturedAt.toISOString(),
     createdAt: m.createdAt.toISOString(),

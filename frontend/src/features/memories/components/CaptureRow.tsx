@@ -69,7 +69,7 @@ function Thumb({ item }: { item: Memory['items'][number] }) {
   if (item.kind === 'video') return <video src={item.url} muted preload="metadata" />
   return (
     <img
-      src={item.url}
+      src={item.thumbUrl ?? item.url}
       alt=""
       loading="lazy"
       onError={(e) => e.currentTarget.classList.add('is-broken')} // e.g. HEIC outside Safari, until the server converts it

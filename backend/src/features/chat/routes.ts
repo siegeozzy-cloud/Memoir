@@ -7,7 +7,7 @@ import { HttpError, parse } from '../../lib/errors.ts'
 import { send } from '../../lib/realtime.ts'
 import { revalidate } from '../../lib/revalidate.ts'
 import { requireAuth, userOf } from '../../lib/session.ts'
-import { LIMITS, readMultipart, saveMedia, type StoredMedia } from '../../lib/uploads.ts'
+import { LIMITS, MAX_FILES, MAX_TOTAL_BYTES, readMultipart, saveMedia, type StoredMedia } from '../../lib/uploads.ts'
 import { listConversations, memberOrFail, oneConversation, otherMembers, pushMessage, shapeMessages } from './service.ts'
 
 // Direct messages. Text and photos go through here (so there's history, search and unread counts);
@@ -89,7 +89,14 @@ export default async function chatRoutes(app: FastifyInstance) {
     const me = userOf(req).id
     const { id } = req.params as { id: string }
     await memberOrFail(id, me)
-    const { fields, files } = await readMultipart(req as never, { maxBytes: LIMITS.chat })
+    // 25 MB a file, 10 files, and 60 MB for the lot: a video is stored as it arrives and forwarding
+    // it to Cloudinary is metered outbound traffic, so one message has to have a ceiling. Without
+    // `maxFiles` this took readMultipart's default of 20, which the web app never offers.
+    const { fields, files } = await readMultipart(req as never, {
+      maxBytes: LIMITS.chat,
+      maxFiles: MAX_FILES.chat,
+      maxTotalBytes: MAX_TOTAL_BYTES.chat,
+    })
     // only checked when something was written: `parse` reads a missing value as an empty object, which
     // a plain string schema then refuses — so parsing it unconditionally turned a photo sent on its
     // own, with no caption, into "A value is missing."

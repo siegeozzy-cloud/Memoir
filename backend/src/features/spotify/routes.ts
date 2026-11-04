@@ -8,7 +8,7 @@ import { decrypt, encrypt } from '../../lib/crypto.ts'
 import { parse } from '../../lib/errors.ts'
 import { requireAuth, userOf } from '../../lib/session.ts'
 import { nudge } from './activity.ts'
-import { linkAccount, SCOPES, spotifyApi } from './client.ts'
+import { forgetSpotifyLink, linkAccount, SCOPES, spotifyApi, spotifyLinkOf } from './client.ts'
 import { toPlayback, type ApiPlayer } from './playback.ts'
 
 // Linking: GET /connect sends the browser to Spotify's consent page; Spotify sends it back to /callback,
@@ -43,7 +43,7 @@ export default async function spotifyRoutes(app: FastifyInstance) {
   const backToApp = (reply: FastifyReply, result: string) => reply.redirect(`${config.appOrigin}/?spotify=${result}`)
 
   app.get('/status', { preHandler: requireAuth }, async (req) => {
-    const link = await db.query.spotifyLinks.findFirst({ where: eq(spotifyLinks.userId, userOf(req).id) })
+    const link = await spotifyLinkOf(userOf(req).id)
     return { configured: config.spotifyConfigured, linked: !!link, displayName: link?.displayName ?? null }
   })
 
@@ -77,6 +77,9 @@ export default async function spotifyRoutes(app: FastifyInstance) {
 
   app.delete('/', { preHandler: requireAuth }, async (req, reply) => {
     await db.delete(spotifyLinks).where(eq(spotifyLinks.userId, userOf(req).id))
+    // the row is gone, so what's held for them has to go too — otherwise the sweep would keep
+    // asking Spotify about somebody who just unlinked, and their friends would keep seeing the label
+    forgetSpotifyLink(userOf(req).id)
     return reply.code(204).send()
   })
 

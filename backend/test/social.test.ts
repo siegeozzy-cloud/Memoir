@@ -5,7 +5,10 @@ import sharp from 'sharp'
 import { buildApp } from '../src/app.ts'
 import { db, pool, runMigrations } from '../src/db/client.ts'
 import { users } from '../src/db/schema.ts'
+import { hasSpotifyLink } from '../src/features/spotify/client.ts'
 import { testOutbox } from '../src/lib/mailer.ts'
+import { announcePresence } from '../src/lib/realtime.ts'
+import { cachedUser, friendsOf, unwatchUser, watchUser } from '../src/lib/user-cache.ts'
 
 // Two people, start to finish: becoming friends, messaging with a photo, forwarding, unsending,
 // posting a memory with a tag, and who may see what. Runs against the development database.
@@ -292,6 +295,31 @@ test('a file over the limit is refused, and says which file and what the limit i
   assert.equal(ok.statusCode, 200, ok.body)
 })
 
+test('a message is capped on how many files and how much they come to, not just each one', async () => {
+  // Each file being under 25 MB is not enough on its own. A video is stored as it arrives, and the
+  // server forwarding it to Cloudinary is metered outbound traffic — so ten at the limit would be a
+  // quarter of a gigabyte of the monthly allowance for one message, and this route used to allow
+  // twenty by taking readMultipart's default. See lib/uploads.ts and docs/deploy.md step 9.
+  const url = `/api/chat/conversations/${conversationId}/messages`
+  const chunk = (mb: number, i: number) => ({ name: `clip${i}.jpg`, type: 'image/jpeg', data: Buffer.alloc(mb * 1024 * 1024, 7) })
+
+  // eleven small files: each one fine, one too many
+  const tooMany = await upload(maria, 'POST', url, {}, Array.from({ length: 11 }, (_, i) => chunk(1, i)))
+  assert.equal(tooMany.statusCode, 413, tooMany.body)
+  assert.equal(tooMany.json().error.code, 'too-many')
+  assert.match(tooMany.json().error.message, /10 files/, 'says how many are allowed')
+
+  // three files, each inside the 25 MB single-file limit, but 72 MB together
+  const tooMuch = await upload(maria, 'POST', url, {}, Array.from({ length: 3 }, (_, i) => chunk(24, i)))
+  assert.equal(tooMuch.statusCode, 413, tooMuch.body)
+  assert.equal(tooMuch.json().error.code, 'too-large')
+  assert.match(tooMuch.json().error.message, /60 MB together/, 'states the limit for the lot')
+
+  // and the same number of files, inside the total, still goes through
+  const fine = await upload(maria, 'POST', url, {}, [await photo('#667788'), await photo('#889900')])
+  assert.equal(fine.statusCode, 200, fine.body)
+})
+
 test('a list already held is answered with 304, not sent again', async () => {
   // something of her own, so her list and a stranger's can't be the same bytes
   const mine = await upload(maria, 'POST', '/api/memories', { draft: JSON.stringify({ place: { name: 'Cebu', country: 'Philippines', lat: 10.3, lon: 123.9 } }) }, [await photo('#206020')])
@@ -316,6 +344,57 @@ test('a list already held is answered with 304, not sent again', async () => {
   await upload(maria, 'POST', '/api/memories', { draft: JSON.stringify({ place: { name: 'Davao', country: 'Philippines', lat: 7.1, lon: 125.6 } }) }, [await photo('#602020')])
   const stale = await app.inject({ method: 'GET', url: '/api/memories', headers: { origin: ORIGIN, cookie: maria.cookie, 'if-none-match': etag } })
   assert.equal(stale.statusCode, 200, 'a changed list must be sent in full')
+})
+
+test('a connected person costs no queries until they actually do something', async () => {
+  // The Spotify sweep runs every ten seconds for as long as *anybody* is connected, and presence is
+  // announced on every track change. If either of those reads the database, a Postgres that
+  // suspends itself when idle never gets the chance — so the free plan's monthly compute goes on a
+  // timer rather than on people using the app, and one client left connected overnight spends it
+  // all. See lib/user-cache.ts and docs/deploy.md step 8.
+  const row = await db.query.users.findFirst({ where: eq(users.id, maria.id) })
+  watchUser(row!)
+  // the first look at each is allowed to read: the caches warm up over the first sweep or two
+  await friendsOf(maria.id)
+  await hasSpotifyLink(maria.id)
+
+  const real = pool.query.bind(pool)
+  let queries = 0
+  Object.defineProperty(pool, 'query', {
+    configurable: true,
+    value: (...args: unknown[]) => {
+      queries++
+      return (real as (...a: unknown[]) => unknown)(...args)
+    },
+  })
+  try {
+    // what a sweep plus a track change does for one connected person, a few times over
+    for (let i = 0; i < 3; i++) {
+      assert.ok(await cachedUser(maria.id), 'the row should still be held')
+      assert.ok((await friendsOf(maria.id)).includes(jack.id), 'and so should the friend list it fans out to')
+      await hasSpotifyLink(maria.id)
+      await announcePresence(maria.id)
+    }
+    assert.equal(queries, 0, `an idle connected person should cost nothing, but that was ${queries} quer${queries === 1 ? 'y' : 'ies'}`)
+  } finally {
+    Reflect.deleteProperty(pool, 'query')
+    unwatchUser(maria.id)
+  }
+
+  // and once they are gone, nothing of theirs is kept: the next look has to read again
+  Object.defineProperty(pool, 'query', {
+    configurable: true,
+    value: (...args: unknown[]) => {
+      queries++
+      return (real as (...a: unknown[]) => unknown)(...args)
+    },
+  })
+  try {
+    await friendsOf(maria.id)
+    assert.ok(queries > 0, 'dropping someone on disconnect is what keeps this bounded')
+  } finally {
+    Reflect.deleteProperty(pool, 'query')
+  }
 })
 
 test('the keep-alive route answers without touching the database', async () => {

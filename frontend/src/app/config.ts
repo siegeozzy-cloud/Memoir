@@ -27,8 +27,16 @@ export const UPLOAD = {
   extensions: ['jpg', 'jpeg', 'png', 'heic', 'heif'],
 }
 
-/** Attachments in a message: videos too, and kept as they arrive, so the allowance is larger. */
+/**
+ * Attachments in a message: videos too, and kept as they arrive, so the allowance is larger.
+ *
+ * All three are checked again on the server (backend/src/lib/uploads.ts — `LIMITS.chat`,
+ * `MAX_FILES.chat`, `MAX_TOTAL_BYTES.chat`), which is the one that counts. `maxTotalBytes` is
+ * there because a video is stored as it was sent: ten at the full size would be a quarter of a
+ * gigabyte out of the server's monthly allowance for one message.
+ */
 export const CHAT_UPLOAD = {
   maxBytes: 25 * MB,
   maxFiles: 10,
+  maxTotalBytes: 60 * MB,
 }

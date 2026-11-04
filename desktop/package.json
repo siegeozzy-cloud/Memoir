@@ -1,0 +1,48 @@
+{
+  "name": "memoir-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Memoir as a desktop app: a window onto the hosted web app, plus a tray icon.",
+  "author": "Memoir",
+  "main": "out/main.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && MEMOIR_APP_URL=http://127.0.0.1:5173 electron .",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.24",
+    "typescript": "^7.0.2"
+  },
+  "build": {
+    "appId": "app.memoir.desktop",
+    "productName": "Memoir",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": ["out/**/*", "assets/**/*", "package.json"],
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "extendInfo": {
+        "NSCameraUsageDescription": "Memoir uses your camera for video calls with your friends.",
+        "NSMicrophoneUsageDescription": "Memoir uses your microphone for voice and video calls."
+      }
+    },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Network"
+    }
+  }
+}

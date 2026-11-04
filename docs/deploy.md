@@ -18,6 +18,16 @@ change.
    `postgresql://user:password@ep-something.eu-central-1.aws.neon.tech/memoir?sslmode=require`.
 3. Keep it for step 4. Nothing to set up inside it: the API creates the tables on its first start.
 
+What the free plan gives you, **per project**: **100 CU-hours** of compute a month, 1 GB of storage,
+and 5 GB of network transfer. The compute number is the one that matters, and it is not 100 hours of
+wall-clock time — it is 100 *compute-unit* hours, and the smallest compute is 0.25 CU, so it buys
+about **400 hours of the database being awake**, against 744 hours in a month. Neon suspends the
+compute after 5 minutes with no queries, which can't be turned off on the free plan, so what you are
+really budgeting is **how many hours a day anything is talking to the database — about 13**.
+
+Run past it and the compute is suspended until the next billing period: connections drop and the app
+is down. Nothing is deleted, and there are no overage charges. Step 9 is about staying under it.
+
 ## 2. Photos and videos (Cloudinary)
 
 1. In the Cloudinary console, open **Settings → API Keys** (or the **Dashboard** card headed *Product
@@ -40,9 +50,20 @@ local folder, which is what happens on your machine.
 If it's wrong, the server now says so on start-up ("CLOUDINARY_URL still has the <your_api_key>
 placeholders in it") instead of crashing with a stack trace.
 
-Everything lands under a `memoir/` folder in your account, so the same account can hold other projects.
+Everything lands under a `memoir/` folder in your account, so the same account can hold other projects
+**without their file names running into each other** — but be clear that this is the only thing the
+folder separates. The free plan's **25 credits a month are per account and shared by everything in it**
+(1 credit = 1 GB stored, or 1 GB delivered, or 1,000 resizes). A second project in the same Cloudinary
+account spends Memoir's allowance, and Memoir's photos are what stop being delivered. Sub-accounts,
+which would separate the quota too, are a paid feature. One account per project, if you can.
+
+Note that storage is a *snapshot*, not a monthly bucket: what you are holding right now is what it
+counts, so it creeps up for as long as nobody deletes anything. Only the 30-day Recently Deleted sweep
+prunes anything automatically, and only posts.
+
 Photos are still shrunk and stripped of their hidden data (including the GPS location) before they leave
-the server.
+the server. They are also now **delivered through Cloudinary's resizer** rather than as stored — see
+step 9.
 
 ## 3. The API (Render)
 
@@ -81,6 +102,14 @@ compute never gets to idle — see step 8.
 wake, and the live connection drops while it sleeps, so messages won't arrive until the app reconnects.
 Step 8 keeps it awake for free; $7/month stops it sleeping with no tricks, and is worth it as soon as
 anyone else uses it daily.
+
+**The free plan's bandwidth allowance is 5 GB a month, not 100.** Render cut it by twenty on
+1 August 2026, when every workspace was moved onto the new plans; a lot of what is written about
+Render's free tier still quotes the old number. Past 5 GB it is $0.15 a GB, or — with no card on the
+account — every service in the workspace is spun down until the 1st. Both the bandwidth and the
+instance hours are **per workspace, pooled across every service and static site in it**, so a second
+project living in the same workspace shares them. Only *outbound* traffic is counted; uploads coming
+in are free, which matters more than it sounds — see step 9.
 
 ## 4. Point the web app at the API
 
@@ -189,6 +218,21 @@ plan meters compute time. You'd keep Render awake by quietly burning your databa
 `/api/ping` answers from memory and touches nothing. `render.yaml` points Render's own health check at
 it for the same reason.
 
+**The same trap, one level in: a timer that runs while people are merely connected.** Pinging the API
+is not the only thing that can hold the database open. The Spotify sweep
+(`backend/src/features/spotify/activity.ts`) runs every ten seconds for as long as *anybody* has a
+socket open, and it used to read each connected person's status and Spotify link out of Postgres each
+time. That is a query every ten seconds with nobody doing anything — so Neon never suspended, and one
+client that just stayed connected (a desktop app sitting in the tray is the obvious way to cause this)
+spent all 100 CU-hours by around the 17th and took the app down for the rest of the month.
+
+Those rows are now cached in memory for the people who are online (`backend/src/lib/user-cache.ts`,
+and the link cache in `features/spotify/client.ts`), so a connected-but-idle person costs **no
+queries at all** and the database is awake only while somebody is actually doing something. If you
+add anything else on a timer, the rule is the same as for `/api/ping`: **it must not touch the
+database.** Those two cache files name every place that has to invalidate them; a missed one shows up
+as a stale status, never as an error.
+
 **This is why you only get one always-on service.** Free instance hours are **750 a month, pooled
 across your whole account**:
 
@@ -213,13 +257,32 @@ three talk to this one API and the same database, so adding clients costs you no
 
 ## 9. Staying inside the free limits
 
-Watch **Render → your service → Metrics** for bandwidth and **Neon → your project → Usage** for compute
-hours. Neon's is the one more likely to bite first.
+Three meters, and they bind in this order: **Neon's compute first, then Cloudinary's credits, then
+Render's bandwidth.**
 
-Most of what the app sends never touches Render's meter — the globe's 32 MB of textures and tiles come
+| | Free allowance | What spends it |
+| --- | --- | --- |
+| Neon | 100 CU-hours ≈ 400 hours awake | hours a day that anybody is using the app |
+| Cloudinary | 25 credits (storage **and** delivery) | photos stored, and photos looked at |
+| Render | 5 GB outbound, 750 instance hours | JSON, socket frames, and bytes sent *to* Cloudinary and Spotify |
+
+Most of what *the app* sends never touches Render's meter — the globe's 32 MB of textures and tiles come
 from Vercel, photos and videos from Cloudinary, album art from Spotify, and call audio and video go
-device to device. Render only carries JSON and WebSocket frames. A few deliberate choices keep that
-small:
+device to device. But "Render only carries JSON and WebSocket frames" is not quite true, and the gap is
+worth knowing:
+
+- **An upload crosses Render's meter once, on its way out to Cloudinary.** Inbound is free, so the
+  phone sending a 15 MB photo costs nothing; the server then forwarding it to Cloudinary is outbound
+  and is counted. Photos are re-encoded down first, so they leave as a few hundred KB. **Videos in
+  messages are not re-encoded** — they go as they arrived, up to 25 MB each, which means **roughly 340
+  of them is the entire 5 GB**. It is the sharpest edge in the whole setup. If it starts to bite, the
+  fix is a signed upload straight from the browser to Cloudinary, which takes those bytes off Render
+  altogether (Cloudinary can strip the EXIF data and resize on the way in, so nothing is lost).
+- **Asking Spotify costs outbound too** — one small request per listener every ten seconds. It is a
+  few hundred MB a month at a handful of listeners, and it scales with how many people are listening
+  at once, not with how many have accounts.
+
+A few deliberate choices keep the rest small:
 
 - **Answers are compressed** (`@fastify/compress` in `app.ts`). JSON gzips to roughly a fifth of its
   size, and nothing in front of this server does it for you.
@@ -238,11 +301,28 @@ small:
   15 MB a photo on a post, 25 MB a file in a message, 10 MB for a profile picture. Photos are
   re-encoded down to 2048px JPEG before they are stored, so what Cloudinary keeps is far smaller than
   what was sent. Change the number in both places or they drift.
+- **Pictures are delivered at the size they are shown**, not the size they were stored
+  (`backend/src/lib/storage.ts`, `TRANSFORM`). Every grid of thumbnails used to download full 2048px
+  photos — one screen of a photo grid was about 18 MB, and a few people browsing was the whole 25
+  credits. The API now hands back a `thumbUrl` beside each `url`, 600px wide, and every place that
+  shows a picture at tile size uses it: the post grid, the viewer's filmstrip, the media grid in a
+  conversation's info panel, and pictures in a chat bubble, which are capped at 300px by CSS and had
+  nothing to open the full copy with anyway. Both URLs also carry `f_auto,q_auto`, so a browser that
+  takes AVIF or WebP gets one. Together that is around ten times less delivered for no visible
+  difference. Cloudinary builds each derived copy once, on first request, and caches it — at 1,000
+  resizes to the credit, they cost almost nothing against the bytes they save.
 
-Roughly, at 50 people using it properly, that comes to **well under a gigabyte a month** of Render
-traffic. The thing most likely to undo it is adding an endpoint that the app polls on a timer, or
-streaming a Cloudinary file through the API instead of handing back its URL — that puts the bytes on
-Render's meter for no reason.
+  In development there is no Cloudinary, so `thumbUrl` is absent and the app falls back to `url`:
+  the grids show full-size pictures locally. Read it as `thumbUrl ?? url` anywhere new.
+
+The thing most likely to undo all of this is adding an endpoint the app polls on a timer, adding a
+*server* timer that queries the database (see step 8), or streaming a Cloudinary file through the API
+instead of handing back its URL — that last one puts the bytes on Render's meter for no reason at all.
+
+**What to watch, and where.** Neon → Usage (CU-hours) is the one to look at first and the one that
+takes the app down rather than charging you. Cloudinary → Dashboard shows credits, and it warns by
+email well before it disables anything. Render → Metrics is per service, Render → Billing is the
+workspace total.
 
 ## 10. Check it
 

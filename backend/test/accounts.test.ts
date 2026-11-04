@@ -6,6 +6,7 @@ import sharp from 'sharp'
 import { buildApp } from '../src/app.ts'
 import { db, pool, runMigrations } from '../src/db/client.ts'
 import { spotifyLinks, users } from '../src/db/schema.ts'
+import { forgetSpotifyLink } from '../src/features/spotify/client.ts'
 import { decrypt, encrypt } from '../src/lib/crypto.ts'
 import { testOutbox } from '../src/lib/mailer.ts'
 import { clearFailures, describeWait, recordFailure } from '../src/lib/throttle.ts'
@@ -226,6 +227,10 @@ test('a stored Spotify token that no longer opens asks for a relink, not a serve
     expiresAt: new Date(Date.now() + 3_600_000),
     scope: 'user-read-playback-state',
   })
+  // the row went in behind the API's back, and the link is cached per process (see client.ts), so
+  // say so — exactly as the unlink route does. Without this the server still believes the earlier
+  // `/status` call, which found no link, and never gets as far as the token it can't open.
+  forgetSpotifyLink(me!.id)
 
   for (const [method, url] of [
     ['GET', '/api/spotify/player'],
@@ -315,6 +320,7 @@ test('a control call Spotify answers with a non-JSON body still works the button
     expiresAt: new Date(Date.now() + 3_600_000),
     scope: 'user-read-playback-state',
   })
+  forgetSpotifyLink(me!.id) // inserted directly, so the cached "no link" has to go
 
   const realFetch = globalThis.fetch
   globalThis.fetch = (async (url: string | URL) =>
@@ -340,6 +346,7 @@ test('a control call Spotify answers with a non-JSON body still works the button
   } finally {
     globalThis.fetch = realFetch
     await db.delete(spotifyLinks).where(eq(spotifyLinks.userId, me!.id))
+    forgetSpotifyLink(me!.id)
   }
 })
 

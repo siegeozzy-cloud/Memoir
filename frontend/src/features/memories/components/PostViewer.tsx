@@ -107,7 +107,8 @@ export default function PostViewer({ memory: m, meId, users, onClose, onLocate, 
             <div className="viewer-strip" ref={strip}>
               {m.items.map((it, i) => (
                 <button key={it.id} type="button" aria-label={`Photo ${i + 1}`} aria-current={i === index || undefined} onClick={() => setIndex(i)}>
-                  {it.kind === 'video' ? <video src={it.url} muted preload="metadata" /> : <img src={it.url} alt="" />}
+                  {/* the strip is thumbnail-sized, so ask for a thumbnail — the big one is loaded above */}
+                  {it.kind === 'video' ? <video src={it.url} muted preload="metadata" /> : <img src={it.thumbUrl ?? it.url} alt="" />}
                 </button>
               ))}
             </div>

@@ -3,7 +3,7 @@ import { db } from '../../db/client.ts'
 import { conversationMembers, conversations, messageAttachments, messages, users } from '../../db/schema.ts'
 import { HttpError } from '../../lib/errors.ts'
 import { isOnline, send, type Push } from '../../lib/realtime.ts'
-import { mediaUrl } from '../../lib/uploads.ts'
+import { mediaThumbUrl, mediaUrl } from '../../lib/uploads.ts'
 import { avatarUrl } from '../auth/users.ts'
 
 // Shapes the rows into what the web app's chat expects (features/chat/types.ts), and keeps
@@ -96,14 +96,18 @@ export async function shapeMessages(rows: MessageRow[], meId: string, readerSees
     senderId: m.senderId,
     createdAt: m.createdAt.toISOString(),
     ...(m.text ? { text: m.text } : {}),
-    attachments: (byMessage.get(m.id) ?? []).map((f) => ({
-      id: f.id,
-      kind: f.kind,
-      url: mediaUrl(f.file, f.kind),
-      name: f.name,
-      ...(f.width ? { width: f.width } : {}),
-      ...(f.height ? { height: f.height } : {}),
-    })),
+    attachments: (byMessage.get(m.id) ?? []).map((f) => {
+      const thumbUrl = mediaThumbUrl(f.file, f.kind)
+      return {
+        id: f.id,
+        kind: f.kind,
+        url: mediaUrl(f.file, f.kind),
+        ...(thumbUrl ? { thumbUrl } : {}),
+        name: f.name,
+        ...(f.width ? { width: f.width } : {}),
+        ...(f.height ? { height: f.height } : {}),
+      }
+    }),
     status: m.senderId !== meId ? 'read' : readerSees.otherReadAt && readerSees.otherReadAt >= m.createdAt ? 'read' : otherOnline ? 'delivered' : 'sent',
     ...(m.forwarded ? { forwarded: true } : {}),
   }))

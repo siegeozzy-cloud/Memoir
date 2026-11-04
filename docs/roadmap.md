@@ -114,7 +114,7 @@ that isn't marked as spam, and for the links that open the mobile app.
 | Backend API | **Render** — not Vercel, see below | $0–7/mo |
 | PostgreSQL | Neon or Supabase (both have a free tier) | free to start |
 | Redis | Upstash | free to start |
-| Photos and videos | Cloudinary | free tier ≈ 25 GB |
+| Photos and videos | Cloudinary | free tier = 25 credits/mo |
 | TURN (calls) | coturn on a VPS, or Metered (50 GB free) | $0–5/mo |
 | Email | Resend (3,000/month free, needs your domain) | free |
 | Desktop | Electron, packaged per platform | free (signing costs later) |
@@ -122,6 +122,11 @@ that isn't marked as spam, and for the links that open the mobile app.
 **Decided: the managed pieces.** Vercel for the web app, Render for the API, Neon for PostgreSQL,
 Upstash for Redis when it's needed, Cloudinary for photos, Metered for TURN. Each has a free tier, each
 updates and backs itself up, and nothing runs on your laptop.
+
+The costs above are indicative and these plans change — Render's included bandwidth was cut twentyfold
+in 2026, and a Cloudinary "credit" covers storage, delivery and resizes out of one pool rather than
+being a plain 25 GB. [docs/deploy.md](deploy.md) step 9 has the current numbers and what spends them;
+trust that one over this table.
 
 ### Vercel: yes for the web app and the domain, no for the API
 
@@ -177,8 +182,18 @@ What that means in practice when we get to it:
    the upload code the mobile view uses, so it's better done before than after.
 2. **Mobile view of the web app.** The screens already shrink; the globe, the panels and the call overlay
    need real phone layouts. This is also what the Flutter WebView will show, so it pays twice.
-3. **Electron.** The thinnest version: a window that loads the hosted web app, plus a tray icon and
-   notifications. A day or two, mostly packaging.
+3. **Electron — done.** The thinnest version: a window that loads the hosted web app, plus a tray
+   icon. It is in [`desktop/`](../desktop/), and it needed no backend change at all — the bearer
+   token, CORS and the configurable API address were already there for it.
+
+   Two things turned out differently from this sketch. **Notifications aren't in it**, because the
+   web app raises none: it has its own in-app notifications and never calls the `Notification` API,
+   so there is nothing for the desktop app to show. The permission is granted, so they will appear
+   the day the web app starts raising them. And **bundling the built frontend was rejected**: the
+   server has one `APP_URL`, and the confirmation email, the password reset and the Spotify callback
+   all redirect to it, so an app served from its own scheme would finish those three journeys in a
+   browser instead of in the app. Loading the hosted app sidesteps all of it. See
+   [desktop/README.md](../desktop/README.md).
 4. **Bearer tokens and push notifications** in the backend — the groundwork for mobile.
 5. **Flutter app.** Sign in, friends, chat, the globe in a WebView, posting a photo, calls
    (`flutter_webrtc` speaks the same signalling we already have).

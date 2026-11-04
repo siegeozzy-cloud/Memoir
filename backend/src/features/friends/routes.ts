@@ -6,6 +6,7 @@ import { friendRequests, friendships, users } from '../../db/schema.ts'
 import { HttpError, parse } from '../../lib/errors.ts'
 import { friendIdsOf, presenceOf, send } from '../../lib/realtime.ts'
 import { requireAuth, userOf } from '../../lib/session.ts'
+import { friendsChanged } from '../../lib/user-cache.ts'
 import { avatarUrl, publicUser } from '../auth/users.ts'
 
 // Friends: find someone by name or unique ID, ask to be friends, accept or decline.
@@ -23,8 +24,14 @@ function asUniqueId(q: string) {
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
-/** Tells people their friends list changed, so their open tabs reload it. */
-const nudge = (...userIds: string[]) => userIds.forEach((id) => send(id, { channel: 'friends' }))
+/**
+ * Tells people their friends list changed, so their open tabs reload it — and drops the cached list
+ * the presence fan-out reads (lib/user-cache.ts), which is exactly as stale as this event says.
+ */
+const nudge = (...userIds: string[]) => {
+  friendsChanged(...userIds)
+  userIds.forEach((id) => send(id, { channel: 'friends' }))
+}
 
 /** The pop-up for a new friend request, unless they've turned those off or asked not to be disturbed. */
 async function notifyRequest(toUserId: string, from: { id: string; name: string; avatarFile: string | null }) {
