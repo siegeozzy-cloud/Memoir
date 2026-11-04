@@ -9,6 +9,7 @@ import { hashToken, newToken, newUniqueId } from '../../lib/crypto.ts'
 import { HttpError, parse } from '../../lib/errors.ts'
 import { sendMail } from '../../lib/mailer.ts'
 import { endAllSessions, endSession, startSession } from '../../lib/session.ts'
+import { clearFailures, describeWait, lockedFor, recordFailure } from '../../lib/throttle.ts'
 import { emailSchema, existingPasswordSchema, linkTokenSchema, nameSchema, passwordSchema } from '../../lib/validation.ts'
 import { alreadyRegistered, resetEmail, verifyEmail } from './emails.ts'
 import { sessionOf } from './users.ts'
@@ -207,9 +208,25 @@ export default async function authRoutes(app: FastifyInstance) {
 
   app.post('/signin', strict(10), async (req, reply) => {
     const input = parse(SignIn, req.body)
+    /**
+     * Guessing is counted against the address, not the machine asking: `strict(10)` above already
+     * caps how fast one address on the internet can try, but an attacker with a pool of them would
+     * otherwise have all the time in the world against a single account. See lib/throttle.ts.
+     */
+    const key = `signin:${input.email}`
+    const tooSoon = lockedFor(key)
+    if (tooSoon) throw new HttpError(429, 'too-many-attempts', `Too many sign-in attempts. Try again in ${describeWait(tooSoon)}.`)
+
     const user = await db.query.users.findFirst({ where: eq(users.email, input.email) })
     const ok = user ? await verify(user.passwordHash, input.password) : (await verify(await dummyHash, input.password), false)
-    if (!user || !ok) throw new HttpError(401, 'wrong-credentials', 'Wrong email or password.')
+    if (!user || !ok) {
+      const locked = recordFailure(key)
+      if (locked) throw new HttpError(429, 'too-many-attempts', `Too many sign-in attempts. Try again in ${describeWait(locked)}.`)
+      throw new HttpError(401, 'wrong-credentials', 'Wrong email or password.')
+    }
+    // the password was right, so whoever is here isn't guessing — the count starts again
+    clearFailures(key)
+
     if (!user.emailVerifiedAt) {
       await sendVerification(user)
       const where = delivery() === 'console' ? 'The link is printed in the backend’s terminal (no mail server is set up).' : `We sent a link to ${user.email}.`

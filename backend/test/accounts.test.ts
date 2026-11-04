@@ -8,6 +8,7 @@ import { db, pool, runMigrations } from '../src/db/client.ts'
 import { spotifyLinks, users } from '../src/db/schema.ts'
 import { decrypt, encrypt } from '../src/lib/crypto.ts'
 import { testOutbox } from '../src/lib/mailer.ts'
+import { clearFailures, describeWait, recordFailure } from '../src/lib/throttle.ts'
 
 // Runs against the development database (npm run db:up), with a fresh email each run.
 // The whole account life: sign up → confirm email → sign in → profile → picture → deactivate → delete.
@@ -238,6 +239,67 @@ test('a stored Spotify token that no longer opens asks for a relink, not a serve
 
   // and the unreadable link is gone, so the app offers to link again rather than retrying forever
   assert.equal(await db.query.spotifyLinks.findFirst({ where: eq(spotifyLinks.userId, me!.id) }), undefined)
+})
+
+/** A sign-in from a given address, so the per-IP limit can be kept out of the way of these. */
+const signInFrom = (payload: object, ip: string) =>
+  app.inject({ method: 'POST', url: '/api/auth/signin', payload, headers: { origin: ORIGIN }, remoteAddress: ip })
+
+test('guessing a password locks that account out, however many addresses the guesses come from', async () => {
+  const target = `brute+${Date.now()}@example.com`
+  const guess = { email: target, password: 'not the right one' }
+  // every guess from a different address: the per-IP limit never fires, so what stops this can
+  // only be the count held against the account itself
+  const from = (i: number) => `10.80.0.${i + 1}`
+
+  for (let i = 0; i < 5; i++) {
+    const r = await signInFrom(guess, from(i))
+    assert.equal(r.statusCode, 401, `guess ${i + 1} should still be allowed: ${r.body}`)
+    assert.equal(r.json().error.code, 'wrong-credentials')
+  }
+
+  const locked = await signInFrom(guess, from(99))
+  assert.equal(locked.statusCode, 429, locked.body)
+  assert.equal(locked.json().error.code, 'too-many-attempts')
+  assert.match(locked.json().error.message, /try again in/i)
+
+  // nothing here says whether anyone has registered that address: the account doesn't exist
+  clearFailures(`signin:${target}`)
+})
+
+test('a locked account refuses the right password too, and signing in clears the count', async () => {
+  const key = `signin:${email}`
+  const wrong = { email, password: 'definitely not the one' }
+  clearFailures(key)
+
+  for (let i = 0; i < 6; i++) await signInFrom(wrong, `10.81.0.${i + 1}`)
+  const right = await signInFrom({ email, password }, '10.81.0.50')
+  assert.equal(right.statusCode, 429, 'a lockout that the real password walks through is not a lockout')
+
+  // a few wrong answers followed by the right one, and the slate is clean again
+  clearFailures(key)
+  for (let i = 0; i < 3; i++) await signInFrom(wrong, `10.82.0.${i + 1}`)
+  const good = await signInFrom({ email, password }, '10.82.0.50')
+  assert.equal(good.statusCode, 200, good.body)
+
+  for (let i = 0; i < 5; i++) {
+    const r = await signInFrom(wrong, `10.83.0.${i + 1}`)
+    assert.equal(r.statusCode, 401, `the successful sign-in should have reset the count, but guess ${i + 1} was ${r.statusCode}`)
+  }
+  clearFailures(key)
+})
+
+test('the wait a person is told to wait is a sentence, and it grows', () => {
+  const key = `unit:${Date.now()}`
+  for (let i = 0; i < 5; i++) assert.equal(recordFailure(key), 0, 'the allowance comes first')
+  const first = recordFailure(key)
+  const second = recordFailure(key, Date.now() + first + 1)
+  assert.ok(first > 0 && second > first, `each lockout should outlast the last: ${first} then ${second}`)
+  clearFailures(key)
+
+  assert.equal(describeWait(1000), '1 second')
+  assert.equal(describeWait(45_000), '45 seconds')
+  assert.equal(describeWait(5 * 60_000), '5 minutes')
 })
 
 test('a control call Spotify answers with a non-JSON body still works the button', async () => {
