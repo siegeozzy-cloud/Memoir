@@ -17,6 +17,11 @@
   background: var(--bg);
 }
 
+/* loading in the background while the session is checked; shown once we know porthole or home */
+.app.is-checking .globe {
+  visibility: hidden;
+}
+
 /* ---------- signing in ----------
    The home controls stay mounted but hidden behind the sign-in screen. Once the porthole has opened
    (auth.css), they ease in: the dock rises, the corner buttons drop in, the fun fact fades up. */

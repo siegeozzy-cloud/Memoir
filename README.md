@@ -7,6 +7,7 @@ Share photos and albums as pins on a 3D globe, chat with friends, and show what 
 | [`frontend/`](frontend/) | The web app (React + Vite + TypeScript). See [frontend/README.md](frontend/README.md). |
 | [`backend/`](backend/) | The API (Node + Fastify + PostgreSQL): accounts, profile, Spotify linking, friends, messaging, calls (WebRTC with STUN/TURN) and posts. See [backend/README.md](backend/README.md). |
 | [`desktop/`](desktop/) | The desktop app (Electron): a window onto the hosted web app, plus a tray icon. No copy of the app inside it. See [desktop/README.md](desktop/README.md). |
+| [`mobile/`](mobile/) | The phone app (Flutter). Scaffold: the API client, models and the globe in a WebView are written; the screens aren't. See [mobile/README.md](mobile/README.md). |
 
 Live at **[memoir-album.vercel.app](https://memoir-album.vercel.app)** once the API is deployed —
 see [docs/deploy.md](docs/deploy.md). The plan for what comes next is in [docs/roadmap.md](docs/roadmap.md).

@@ -1,25 +1,20 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useProfile } from '../features/account/useProfile'
 import type { SignInInput, SignUpInput } from '../features/auth/service'
 import { useAuth } from '../features/auth/useAuth'
 import { useChat } from '../features/chat/useChat'
-import CallOverlay from '../features/calls/components/CallOverlay'
 import { useCall } from '../features/calls/useCall'
-import AddFriendDialog from '../features/friends/components/AddFriendDialog'
 import { friendsApi } from '../features/friends/service'
 import { useFriends } from '../features/friends/useFriends'
 import AuthScreen from '../features/auth/components/AuthScreen'
 import { SHOWCASE_PIN } from '../features/auth/components/porthole'
-import CapturesPanel, { type CapturesView } from '../features/memories/components/CapturesPanel'
-import PostViewer from '../features/memories/components/PostViewer'
-import ChatPanel from '../features/chat/components/ChatPanel'
+import type { CapturesView } from '../features/memories/components/CapturesPanel'
 import DetailsToggle from '../features/home/DetailsToggle'
 import Dock from '../features/home/Dock'
 import FunFact from '../features/home/FunFact'
 import GlobeView, { type GlobeFocus, type GlobeIntro } from '../features/globe/GlobeView'
 import NotificationTab from '../features/home/NotificationTab'
 import ProfileMenu from '../features/account/components/ProfileMenu'
-import LyricsPanel from '../features/spotify/components/LyricsPanel'
 import NowPlaying from '../features/spotify/components/NowPlaying'
 import '../features/spotify/components/spotify.css'
 import { GLOBE_ROTATION, NOTIFICATION_MS } from './config'
@@ -33,6 +28,17 @@ import { useNotifications } from '../features/home/useNotifications'
 import { useMemories } from '../features/memories/useMemories'
 import type { Memory, User } from '../shared/types'
 import './App.css'
+
+// Everything that only exists once you're signed in is split into its own chunk, so the first
+// screen (globe + sign-in) doesn't wait on the code and styles for chat, captures, calls and lyrics.
+const loadChat = () => import('../features/chat/components/ChatPanel')
+const loadCaptures = () => import('../features/memories/components/CapturesPanel')
+const ChatPanel = lazy(loadChat)
+const CapturesPanel = lazy(loadCaptures)
+const PostViewer = lazy(() => import('../features/memories/components/PostViewer'))
+const AddFriendDialog = lazy(() => import('../features/friends/components/AddFriendDialog'))
+const CallOverlay = lazy(() => import('../features/calls/components/CallOverlay'))
+const LyricsPanel = lazy(() => import('../features/spotify/components/LyricsPanel'))
 
 const DETAILS_KEY = 'memoir.globe.details'
 
@@ -88,6 +94,11 @@ export default function App() {
   const [placingWanted, setPlacingWanted] = useState(false)
   const placing = placingWanted && capturesOpen && (capturesView === 'upload' || capturesView === 'edit')
   const friends = useMemo(() => chat.people.map((p) => p.user), [chat.people])
+
+  // fetch the panels' code in the background as soon as someone is signed in, so opening one is instant
+  useEffect(() => {
+    if (signedIn) void Promise.all([loadChat(), loadCaptures()])
+  }, [signedIn])
 
   useEffect(() => {
     localStorage.setItem(DETAILS_KEY, details ? 'on' : 'off')
@@ -218,9 +229,8 @@ export default function App() {
 
   return (
     <main className={`app is-${phase}${chatOpen ? ' chat-open' : ''}${capturesOpen ? ' captures-open' : ''}${sunPanel ? ' sun-panel-open' : ''}`}>
-      {/* waits for the session check, so the globe starts in the right place (porthole or home) */}
-      {phase !== 'checking' && (
-        <GlobeView
+      {/* starts loading straight away (hidden while the session is checked), so its textures download in parallel */}
+      <GlobeView
           memories={atHome ? memories.visible : NO_MEMORIES}
           details={details && atHome}
           rotation={rotation}
@@ -239,7 +249,6 @@ export default function App() {
           intro={phase === 'auth' ? authFrame : null}
           showcase={phase === 'auth' ? SHOWCASE_PIN : null}
         />
-      )}
 
       {(phase === 'auth' || phase === 'entering') && (
         <AuthScreen
@@ -268,7 +277,7 @@ export default function App() {
             {spotify.notice}
           </p>
         )}
-        <LyricsPanel spotify={spotify} onMap={onMap} shown={spotify.lyricsOn && !!spotify.playback && !capturesOpen && !phone && atHome} />
+        {signedIn && <Suspense fallback={null}><LyricsPanel spotify={spotify} onMap={onMap} shown={spotify.lyricsOn && !!spotify.playback && !capturesOpen && !phone && atHome} /></Suspense>}
         <ProfileMenu profileApi={profileApi} email={auth.session?.email ?? ''} spotify={spotify} onSignOut={signOut} />
         <DetailsToggle on={details} onChange={setDetails} />
 
@@ -283,6 +292,8 @@ export default function App() {
           />
         </footer>
 
+        {signedIn && (
+        <Suspense fallback={null}>
         <CapturesPanel
           ref={capturesRef}
           open={capturesOpen}
@@ -310,7 +321,11 @@ export default function App() {
           onRemoveFriend={(userId) => void friendsApi.unfriend(userId)}
         />
 
+        </Suspense>
+        )}
+
         {viewing && (
+          <Suspense fallback={null}>
           <PostViewer
             key={viewing.id}
             memory={viewing}
@@ -321,11 +336,14 @@ export default function App() {
             // TODO: profiles
             onOpenProfile={() => {}}
           />
+          </Suspense>
         )}
       </div>
 
+      <Suspense fallback={null}>
       {addingFriend && <AddFriendDialog myUniqueId={profileApi.profile?.uniqueId} requests={requests} people={friends} onClose={() => setAddingFriend(false)} />}
-      <CallOverlay call={call} />
+      {signedIn && <CallOverlay call={call} />}
+      </Suspense>
       {call.notice && (
         <p className="sp-toast" role="status">
           {call.notice}

@@ -102,8 +102,10 @@ export default function GlobeView({ memories, details, rotation, stageBottom, st
   useEffect(() => {
     if (!loaded) return
     // the framing sent right after the globe loads applies at once; later changes fly there
+    // the first framing jumps into place; later changes fly there. The globe now loads during the
+    // session check, before the framing is known, so a null before then doesn't count as the first.
     send({ intro: intro && { ...intro, jump: !introPrimed.current } })
-    introPrimed.current = true
+    if (intro) introPrimed.current = true
   }, [loaded, send, intro])
   useEffect(() => {
     if (loaded) send({ showcase })
